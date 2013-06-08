@@ -13,8 +13,8 @@ print "importing netifaces"
 import netifaces
 
 print "importing codernity"
-from CodernityDB.index    import IndexConflict
-from CodernityDB.database import Database
+from CodernityDB.database   import Database
+from CodernityDB.tree_index import TreeBasedIndex
 print "finished importing"
 
 test       = True
@@ -91,7 +91,6 @@ class Base(object):
 		return res
 	
 		pass
-
 
 class Memory(Base):
 	def __init__(self, *args):
@@ -514,6 +513,22 @@ class Data_structure(Base):
 	def __repr__(self):
 		return "<DATASTRUCT('%s', '%s', '%s', '%s', '%s')>" % ( self.memories, self.cpus, self.disks, self.networks, self.processes )
 
+class WithXIndex(TreeBasedIndex):
+
+	def __init__(self, *args, **kwargs):
+		kwargs['node_capacity'] = 10
+		kwargs['key_format'   ] = 'Q'
+		super(WithXIndex, self).__init__(*args, **kwargs)
+
+	def make_key_value(self, data):
+		t_val = data.get('x')
+		if t_val is not None:
+			return t_val, None
+		return None
+
+	def make_key(self, key):
+		return key
+
 class DataManager(object):
 	def __init__(self, numReport, echo=False):
 		self.numReport = numReport
@@ -523,10 +538,12 @@ class DataManager(object):
 		
 		print "      DataManager: creating database"
 		
-		try:
-			self.db.create()
-		except IndexConflict:
+		if self.db.exists():
 			self.db.open()
+		else:
+			self.db.create()
+			self.D_ind = WithXIndex(self.db.path, 'D')
+			self.db.add_index(self.D_ind)
 		
 		self.data       = None
 		self.qry        = None
@@ -543,11 +560,12 @@ class DataManager(object):
 		print "      DataManager: adding data"
 
 		#key = myName+";"+str(utime)
-		key = (myName, utime)
+		#key = (myName, utime)
+		key = utime
 		
 		print "      DataManager: key",key
 		
-		print self.db.insert(dict( key=self.data.get_dict() ))
+		print self.db.insert( { key:{myName: self.data.get_dict()} } )
 
 		print "      DataManager: done"
 
@@ -580,6 +598,7 @@ class DataManager(object):
 			currs.append( curr )
 
 		print "      DataManager: done. length:", len(currs)
+		print "      DataManager: details", self.db.get_db_details()
 		
 		return currs
 
