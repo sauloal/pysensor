@@ -2,6 +2,7 @@
 import sys, os
 import time
 import unicodedata
+import signal
 
 print "importing zmq"
 import zmq
@@ -20,7 +21,7 @@ from random import choice
 
 print "finished importing"
 
-sys.path.index(0, '.')
+sys.path.insert(0, '.')
 import status
 
 dbPath           = status.dbPath
@@ -70,122 +71,149 @@ class UDP(object):
 		if addrinfo[0] != self.address:
 			print("Found peer %s:%d" % addrinfo)
 
-def broadcaster():
-	udp    = UDP(PING_PORT_NUMBER)
-	poller = zmq.Poller()
-	poller.register(udp.handle, zmq.POLLIN)
+class broadcaster(threading.Thread):
+	"""broadcaster"""
+	def __init__(self):
+		threading.Thread.__init__ (self)
+		self.kill_received = False
 
-	# Send first ping right away
-	ping_at = time.time()
+	def run(self):
+		print "UDP: running"
+		udp    = UDP(PING_PORT_NUMBER)
+		poller = zmq.Poller()
+		print "UDP: running: registering"
+		poller.register(udp.handle, zmq.POLLIN)
+	
+		# Send first ping right away
+		ping_at = time.time()
+	
+		while not self.kill_received:
+			timeout = ping_at - time.time()
+			if timeout  < 0:
+				timeout = 0
+			try:
+				events = dict(poller.poll(1000* timeout))
+			except KeyboardInterrupt:
+				print("interrupted")
+				break
+	
+			# Someone answered our ping
+			if udp.handle.fileno() in events:
+				udp.recv(PING_MSG_SIZE)
+	
+			if time.time() >= ping_at:
+				# Broadcast our beacon
+				print ("Pinging peers...")
+				udp.send('!')
+				ping_at = time.time() + PING_INTERVAL
 
-	while True:
-		timeout = ping_at - time.time()
-		if timeout  < 0:
-			timeout = 0
-		try:
-			events = dict(poller.poll(1000* timeout))
-		except KeyboardInterrupt:
-			print("interrupted")
-			break
-
-		# Someone answered our ping
-		if udp.handle.fileno() in events:
-			udp.recv(PING_MSG_SIZE)
-
-		if time.time() >= ping_at:
-			# Broadcast our beacon
-			print ("Pinging peers...")
-			udp.send('!')
-			ping_at = time.time() + PING_INTERVAL
-
-
+		print "UDP: running: leaving"
 
 
 class ClientTask(threading.Thread):
 	"""ClientTask"""
-	def __init__(self):
+	def __init__(self, context):
 		threading.Thread.__init__ (self)
+		self.context       = context
+		self.kill_received = False
 
 	def run(self):
-		context = zmq.Context()
-		socket = context.socket(zmq.DEALER)
+		print "CLIENT: running"
+		socket   = self.context.socket(zmq.DEALER)
 		identity = 'worker-%d' % (choice([0,1,2,3,4,5,6,7,8,9]))
+		
 		socket.setsockopt(zmq.IDENTITY, identity )
+		socket.setsockopt(zmq.LINGER  , 1        )
 		socket.connect('tcp://localhost:5570')
-		print 'Client %s started' % (identity)
+		
+		print 'CLIENT: running. Client %s started' % (identity)
 		poll = zmq.Poller()
 		poll.register(socket, zmq.POLLIN)
 		reqs = 0
-		while True:
+		
+		while not self.kill_received:
 			for i in xrange(5):
 				sockets = dict(poll.poll(1000))
 				if socket in sockets:
 					if sockets[socket] == zmq.POLLIN:
 						msg = socket.recv()
-						print 'Client %s received: %s\n' % (identity, msg)
+						print 'CLIENT: running. Client %s received: %s\n' % (identity, msg)
 						del msg
+			
 			reqs = reqs + 1
-			print 'Req #%d sent..' % (reqs)
+			print 'CLIENT: running. Req #%d sent..' % (reqs)
 			socket.send('request #%d' % (reqs))
 
+		print "CLIENT: running. ending client"
+
+		print "CLIENT: running. closing socket"
 		socket.close()
-		context.term()
+
+		print "CLIENT: running. termination context"
+		self.context.term()
+
+		print "CLIENT: running. done"
 
 class ServerTask(threading.Thread):
 	"""ServerTask"""
-	def __init__(self):
+	def __init__(self, context):
 		threading.Thread.__init__ (self)
+		self.context       = context
+		self.kill_received = False
 
 	def run(self):
-		context = zmq.Context()
-		frontend = context.socket(zmq.ROUTER)
+		print "SERVER: running"
+		frontend = self.context.socket(zmq.ROUTER)
 		frontend.bind('tcp://*:5570')
+		frontend.setsockopt(zmq.LINGER  , 1        )
 
-		backend = context.socket(zmq.DEALER)
+		print "SERVER running: backend"
+		backend  = self.context.socket(zmq.DEALER)
 		backend.bind('inproc://backend')
+		backend.setsockopt(zmq.LINGER  , 1        )
 
-		workers = []
-		for i in xrange(5):
-			worker = ServerWorker(context)
-			worker.start()
-			workers.append(worker)
-
+		print "SERVER running: pool"
 		poll = zmq.Poller()
 		poll.register(frontend, zmq.POLLIN)
 		poll.register(backend,  zmq.POLLIN)
 
-		while True:
+		while not self.kill_received:
 			sockets = dict(poll.poll())
 			if frontend in sockets:
 				if sockets[frontend] == zmq.POLLIN:
 					_id = frontend.recv()
 					msg = frontend.recv()
-					print 'Server received %s id %s\n' % (msg, _id)
+					print 'SERVER running: Server received %s id %s\n' % (msg, _id)
 					backend.send(_id, zmq.SNDMORE)
 					backend.send(msg)
+
 			if backend in sockets:
 				if sockets[backend] == zmq.POLLIN:
 					_id = backend.recv()
 					msg = backend.recv()
-					print 'Sending to frontend %s id %s\n' % (msg, _id)
+					print 'SERVER running: Sending to frontend %s id %s\n' % (msg, _id)
 					frontend.send(_id, zmq.SNDMORE)
 					frontend.send(msg)
-
+		print "SERVER running: closing"
+		
 		frontend.close()
 		backend.close()
-		context.term()
+		self.context.term()
 
 class ServerWorker(threading.Thread):
 	"""ServerWorker"""
 	def __init__(self, context):
 		threading.Thread.__init__ (self)
-		self.context = context
+		self.context       = context
+		self.kill_received = False
 
 	def run(self):
+		print "WORKER running"
 		worker = self.context.socket(zmq.DEALER)
 		worker.connect('inproc://backend')
-		print 'Worker started'
-		while True:
+
+		print "WORKER running: starting"
+		while not self.kill_received:
 			_id = worker.recv()
 			msg = worker.recv()
 			print 'Worker received %s from %s' % (msg, _id)
@@ -197,9 +225,15 @@ class ServerWorker(threading.Thread):
 
 			del msg
 
+		print "WORKER running: closing"
 		worker.close()
+		print "WORKER running: finished"
 
-def server_start():
+
+
+
+
+def main_server():
 	"""main function
 	Here's how it works:
 
@@ -228,9 +262,93 @@ def server_start():
 	using an internal queue. It connects the frontend and backend 
 	sockets using a zmq_proxy() call.
 	"""
-	server = ServerTask()
+	context       = zmq.Context()
+	
+	print "initializing server"
+	server        = ServerTask(context)
+	server.daemon = True
+
+	print "initializing worker"
+	worker        = ServerWorker(context)
+	worker.daemon = True
+
+	print "initializing broadcaster"
+	broad         = broadcaster()
+	broad.daemon  = True
+
+	run_event    = threading.Event()
+	run_event.set()
+
+	print "starting server"
 	server.start()
-	server.join()
+	worker.start()
+	broad.start()
+	
+	try:
+		while True: time.sleep( 100 )
+
+	except (KeyboardInterrupt, SystemExit):
+		print "clear"
+		run_event.clear()
+
+		server.kill_received = True
+		worker.kill_received = True
+		broad.kill_received  = True
+
+		print "joining"
+		server.join()
+		worker.join()
+		broad.join()
+
+		print "bye"
+		sys.exit(0)
+
+		print "exit"
+
+def main_client():
+	data          = status.DataManager(db_path=dbPath, ext=pycklerext)
+	context       = zmq.Context()
+
+	run_event     = threading.Event()
+	run_event.set()
+	client        = ClientTask(context)
+	client.daemon = True
+	client.start()
+
+	try:
+		while True: time.sleep( 100 )
+
+	except (KeyboardInterrupt, SystemExit):
+		print "clear"
+		run_event.clear()
+
+		client.kill_received = True
+
+		print "joining"
+		client.join()
+
+		print "bye"
+		sys.exit(0)
+
+		print "exit"
+
+
+if __name__ == '__main__':
+	print __file__
+	
+	#http://zguide.zeromq.org/py:all
+	#http://zguide.zeromq.org/py:taskwork
+	#http://zguide.zeromq.org/py:tasksink
+	#https://github.com/imatix/zguide/tree/master/examples/Python
+
+	if  os.path.basename( __file__ ) in [ 'server.py' ]:
+		main_server()
+	
+	elif os.path.basename( __file__ ) in [ 'client.py' ]:
+		main_client()
+
+
+
 
 
 	
@@ -239,157 +357,203 @@ def server_start():
 	
 	
 	
+#class ServerTask(threading.Thread):
+#	"""ServerTask"""
+#	def __init__(self):
+#		threading.Thread.__init__ (self)
+#		self.kill_received = False
+#
+#	def run(self):
+#		context  = zmq.Context()
+#		frontend = context.socket(zmq.ROUTER)
+#		frontend.bind('tcp://*:5570')
+#
+#		socket.setsockopt(zmq.LINGER  , 1        )
+#
+#		backend  = context.socket(zmq.DEALER)
+#		backend.bind('inproc://backend')
+#
+#		workers = []
+#		for i in xrange(5):
+#			worker = ServerWorker(context)
+#			worker.start()
+#			workers.append(worker)
+#
+#		poll = zmq.Poller()
+#		poll.register(frontend, zmq.POLLIN)
+#		poll.register(backend,  zmq.POLLIN)
+#
+#		while not self.kill_received:
+#			sockets = dict(poll.poll())
+#			if frontend in sockets:
+#				if sockets[frontend] == zmq.POLLIN:
+#					_id = frontend.recv()
+#					msg = frontend.recv()
+#					print 'Server received %s id %s\n' % (msg, _id)
+#					backend.send(_id, zmq.SNDMORE)
+#					backend.send(msg)
+#			if backend in sockets:
+#				if sockets[backend] == zmq.POLLIN:
+#					_id = backend.recv()
+#					msg = backend.recv()
+#					print 'Sending to frontend %s id %s\n' % (msg, _id)
+#					frontend.send(_id, zmq.SNDMORE)
+#					frontend.send(msg)
+#
+#		frontend.close()
+#		backend.close()
+#		context.term()
 	
 	
 	
-def msreader():
-	# encoding: utf-8
-	#
-	#   Reading from multiple sockets
-	#   This version uses a simple recv loop
-	#
-	#   Author: Jeremy Avnet (brainsik) <spork(dash)zmq(at)theory(dot)org>
-	#
-
-	# Prepare our context and sockets
-	context = zmq.Context()
-
-	# Connect to task ventilator
-	receiver = context.socket(zmq.PULL)
-	receiver.connect("tcp://localhost:5557")
-
-	# Connect to weather server
-	subscriber = context.socket(zmq.SUB)
-	subscriber.connect("tcp://localhost:5556")
-	subscriber.setsockopt(zmq.SUBSCRIBE, "10001")
-
-	# Process messages from both sockets
-	# We prioritize traffic from the task ventilator
-	while True:
-
-		# Process any waiting tasks
-		while True:
-			try:
-				rc = receiver.recv(zmq.DONTWAIT)
-			except zmq.ZMQError:
-				break
-			# process task
-
-		# Process any waiting weather updates
-		while True:
-			try:
-				rc = subscriber.recv(zmq.DONTWAIT)
-			except zmq.ZMQError:
-				break
-			# process weather update
-
-		# No activity, so sleep for 1 msec
-		time.sleep(0.001)
-
-def mspooler():
-	# encoding: utf-8
-	#
-	#   Reading from multiple sockets
-	#   This version uses zmq.Poller()
-	#
-	#   Author: Jeremy Avnet (brainsik) <spork(dash)zmq(at)theory(dot)org>
-	#
-
-	# Prepare our context and sockets
-	context = zmq.Context()
-
-	# Connect to task ventilator
-	receiver = context.socket(zmq.PULL)
-	receiver.connect("tcp://localhost:5557")
-
-	# Connect to weather server
-	subscriber = context.socket(zmq.SUB)
-	subscriber.connect("tcp://localhost:5556")
-	subscriber.setsockopt(zmq.SUBSCRIBE, "10001")
-
-	# Initialize poll set
-	poller = zmq.Poller()
-	poller.register(receiver, zmq.POLLIN)
-	poller.register(subscriber, zmq.POLLIN)
-
-	# Process messages from both sockets
-	while True:
-		socks = dict(poller.poll())
-
-		if receiver in socks and socks[receiver] == zmq.POLLIN:
-			message = receiver.recv()
-			# process task
-
-		if subscriber in socks and socks[subscriber] == zmq.POLLIN:
-			message = subscriber.recv()
-			# process weather update
-
-def sink():
-	# Task sink
-	# Binds PULL socket to tcp://localhost:5558
-	# Collects results from workers via that socket
-	#
-	# Author: Lev Givon <lev(at)columbia(dot)edu>
-
-
-	context = zmq.Context()
-
-	# Socket to receive messages on
-	receiver = context.socket(zmq.PULL)
-	receiver.bind("tcp://*:5558")
-
-	# Wait for start of batch
-	s = receiver.recv(zmq.DONTWAIT)
-
-	# Start our clock now
-	tstart = time.time()
-
-	# Process 100 confirmations
-	total_msec = 0
-	for task_nbr in range(100):
-		s = receiver.recv()
-		if task_nbr % 10 == 0:
-			sys.stdout.write(':')
-		else:
-			sys.stdout.write('.')
-
-	# Calculate and report duration of batch
-	tend = time.time()
-	print "Total elapsed time: %d msec" % ((tend-tstart)*1000)
-
-def worker():
-	# Task worker
-	# Connects PULL socket to tcp://localhost:5557
-	# Collects workloads from ventilator via that socket
-	# Connects PUSH socket to tcp://localhost:5558
-	# Sends results to sink via that socket
-	#
-	# Author: Lev Givon <lev(at)columbia(dot)edu>
-
-
-	context = zmq.Context()
-
-	# Socket to receive messages on
-	receiver = context.socket(zmq.PULL)
-	receiver.connect("tcp://localhost:5557")
-
-	# Socket to send messages to
-	sender = context.socket(zmq.PUSH)
-	sender.connect("tcp://localhost:5558")
-
-	# Process tasks forever
-	while True:
-		s = receiver.recv(zmq.DONTWAIT)
-
-		# Simple progress indicator for the viewer
-		sys.stdout.write('.')
-		sys.stdout.flush()
-
-		# Do the work
-		time.sleep(int(s)*0.001)
-
-		# Send results to sink
-		sender.send('')
+#def msreader():
+#	# encoding: utf-8
+#	#
+#	#   Reading from multiple sockets
+#	#   This version uses a simple recv loop
+#	#
+#	#   Author: Jeremy Avnet (brainsik) <spork(dash)zmq(at)theory(dot)org>
+#	#
+#
+#	# Prepare our context and sockets
+#	context = zmq.Context()
+#
+#	# Connect to task ventilator
+#	receiver = context.socket(zmq.PULL)
+#	receiver.connect("tcp://localhost:5557")
+#
+#	# Connect to weather server
+#	subscriber = context.socket(zmq.SUB)
+#	subscriber.connect("tcp://localhost:5556")
+#	subscriber.setsockopt(zmq.SUBSCRIBE, "10001")
+#
+#	# Process messages from both sockets
+#	# We prioritize traffic from the task ventilator
+#	while True:
+#
+#		# Process any waiting tasks
+#		while True:
+#			try:
+#				rc = receiver.recv(zmq.DONTWAIT)
+#			except zmq.ZMQError:
+#				break
+#			# process task
+#
+#		# Process any waiting weather updates
+#		while True:
+#			try:
+#				rc = subscriber.recv(zmq.DONTWAIT)
+#			except zmq.ZMQError:
+#				break
+#			# process weather update
+#
+#		# No activity, so sleep for 1 msec
+#		time.sleep(0.001)
+#
+#def mspooler():
+#	# encoding: utf-8
+#	#
+#	#   Reading from multiple sockets
+#	#   This version uses zmq.Poller()
+#	#
+#	#   Author: Jeremy Avnet (brainsik) <spork(dash)zmq(at)theory(dot)org>
+#	#
+#
+#	# Prepare our context and sockets
+#	context = zmq.Context()
+#
+#	# Connect to task ventilator
+#	receiver = context.socket(zmq.PULL)
+#	receiver.connect("tcp://localhost:5557")
+#
+#	# Connect to weather server
+#	subscriber = context.socket(zmq.SUB)
+#	subscriber.connect("tcp://localhost:5556")
+#	subscriber.setsockopt(zmq.SUBSCRIBE, "10001")
+#
+#	# Initialize poll set
+#	poller = zmq.Poller()
+#	poller.register(receiver, zmq.POLLIN)
+#	poller.register(subscriber, zmq.POLLIN)
+#
+#	# Process messages from both sockets
+#	while True:
+#		socks = dict(poller.poll())
+#
+#		if receiver in socks and socks[receiver] == zmq.POLLIN:
+#			message = receiver.recv()
+#			# process task
+#
+#		if subscriber in socks and socks[subscriber] == zmq.POLLIN:
+#			message = subscriber.recv()
+#			# process weather update
+#
+#def sink():
+#	# Task sink
+#	# Binds PULL socket to tcp://localhost:5558
+#	# Collects results from workers via that socket
+#	#
+#	# Author: Lev Givon <lev(at)columbia(dot)edu>
+#
+#
+#	context = zmq.Context()
+#
+#	# Socket to receive messages on
+#	receiver = context.socket(zmq.PULL)
+#	receiver.bind("tcp://*:5558")
+#
+#	# Wait for start of batch
+#	s = receiver.recv(zmq.DONTWAIT)
+#
+#	# Start our clock now
+#	tstart = time.time()
+#
+#	# Process 100 confirmations
+#	total_msec = 0
+#	for task_nbr in range(100):
+#		s = receiver.recv()
+#		if task_nbr % 10 == 0:
+#			sys.stdout.write(':')
+#		else:
+#			sys.stdout.write('.')
+#
+#	# Calculate and report duration of batch
+#	tend = time.time()
+#	print "Total elapsed time: %d msec" % ((tend-tstart)*1000)
+#
+#def worker():
+#	# Task worker
+#	# Connects PULL socket to tcp://localhost:5557
+#	# Collects workloads from ventilator via that socket
+#	# Connects PUSH socket to tcp://localhost:5558
+#	# Sends results to sink via that socket
+#	#
+#	# Author: Lev Givon <lev(at)columbia(dot)edu>
+#
+#
+#	context = zmq.Context()
+#
+#	# Socket to receive messages on
+#	receiver = context.socket(zmq.PULL)
+#	receiver.connect("tcp://localhost:5557")
+#
+#	# Socket to send messages to
+#	sender = context.socket(zmq.PUSH)
+#	sender.connect("tcp://localhost:5558")
+#
+#	# Process tasks forever
+#	while True:
+#		s = receiver.recv(zmq.DONTWAIT)
+#
+#		# Simple progress indicator for the viewer
+#		sys.stdout.write('.')
+#		sys.stdout.flush()
+#
+#		# Do the work
+#		time.sleep(int(s)*0.001)
+#
+#		# Send results to sink
+#		sender.send('')
 
 
 
@@ -433,27 +597,3 @@ def worker():
 #<User('ed','Ed Jones', 'f8s7ccs')> None
 #session.dirty # prints changes to be made
 
-
-def main_server():
-	broadcaster()
-	server_start()
-
-def main_client():
-	data   = status.DataManager(db_path=dbPath, ext=pycklerext)
-	client = ClientTask()
-	client.start()
-
-
-if __name__ == '__main__':
-	print __file__
-	
-	#http://zguide.zeromq.org/py:all
-	#http://zguide.zeromq.org/py:taskwork
-	#http://zguide.zeromq.org/py:tasksink
-	#https://github.com/imatix/zguide/tree/master/examples/Python
-
-	if  os.path.basename( __file__ ) in [ 'server.py' ]:
-		main_server()
-	
-	elif os.path.basename( __file__ ) in [ 'client.py' ]:
-		main_client()
