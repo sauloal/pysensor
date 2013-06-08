@@ -12,125 +12,90 @@ import zmq
 print "importing netifaces"
 import netifaces
 
-print "importing sqlalchemy"
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm				import sessionmaker, relationship, backref
-from sqlalchemy					import Column, Integer, String, Float, ForeignKey, ForeignKeyConstraint
-from sqlalchemy					import create_engine, Sequence
-Base            = declarative_base()
+print "importing codernity"
+from CodernityDB.index    import IndexConflict
+from CodernityDB.database import Database
 print "finished importing"
 
-test       = False
-numReport  = -2
+test       = True
+numReport  = 2
 myNameFile = '.status'
-db_path    = 'sqlite:///status.db'
-# db_path  = 'sqlite:///:memory:'
 
+db_path    = 'status.cod'
 
-#apt-get install sqlite3
 #apt-get install python-pip
 #apt-get install python-dev
 #apt-get install libzmq-dev
 
-#easy_install pysqlite
-#easy_install SQLAlchemy
 #easy_install psutil
 #easy_install netifaces
 #easy_install pyzmq
 
-#NOT NECESSARY
-#apt-get install python-sqlalchemy
-#apt-get install python-sqlite
 
-utime  = time.time()
-myName = None
-
-forbidden = ['data_structure', 'metadata']
+utime     = time.time()
+myName    = None
+forbidden = []
 
 
-
-
-def get_fields(self):
-	# print "table name", self.__table__
-	keys = []
-	for x in dir( self ):
-		if x[0] == '_'                : continue
-		if x in forbidden             : continue
-		y = getattr(self, x)
-		if hasattr(y, '__call__')     : continue
-		if isfunction(y)              : continue
-		if '__main__.' in str(type(y)): continue
-		
-		# <class 'sqlalchemy.orm.collections.InstrumentedList'>
-		
-		# print "x",x,"t",type(y)
-		keys.append(x)
-		
-	# print [ x for x in dir( self.__table__ ) if x[0] != '_' ]
-	# print self.__table__.columns
-	# print "self table"          , self.__table__
-	# print "self table dir self" , dir( self           )
-	# print "self table dir table", dir( self.__table__ )
-	# print "self table columns"  , self.__table__.columns
-	# print "self table descript" , self.__table__.description
-	# print "self table foreign"  , self.__table__.foreign_keys
-	#print "self table children" , self.__table__.get_children()
-	# print "self table info"     , self.__table__.info
-	# print "self table schema"   , self.__table__.schema
+class Base(object):
+	def get_fields(self):
+		# print "table name", self.__table__
+		keys = []
+		for x in dir( self ):
+			if x[0] == '_'                : continue
+			if x in forbidden             : continue
+			y = getattr(self, x)
+			if hasattr(y, '__call__')     : continue
+			if isfunction(y)              : continue
+			if '__main__.' in str(type(y)): continue
 	
-	# print keys, "\n"
-	return keys
-
-def get_dict(self):
-	res = {}
+			keys.append(x)
+			
+		return keys
 	
-	for key in self.get_fields():
-		val = getattr( self, key )
-		
-		if str(type( val )) == "<class 'sqlalchemy.orm.state.InstanceState'>":
-			continue
+	def get_dict(self):
+		res = {}
 
-		if str(type( val )) == "<class 'sqlalchemy.orm.collections.InstrumentedList'>":
-			valt = []
-			for v in val:
-				valt.append( v.get_dict() )
-			val  = valt
-
-		elif str(type( val )) == "<type 'unicode'>":
-			# print "fixing unicode"
-			val  = unicodedata.normalize('NFKD', val).encode('ascii','ignore')
-
-		else:
-			#print str(type( val ))
-			pass
-		
-		res[ key ] = val
+		for key in self.get_fields():
+			val     = getattr( self, key )
+			valtype = str(type( val ))
+			#print "key",key,"val",val,"type",str(type( val ))
 	
-	return res
+			if valtype.startswith("<class "):
+				#print "getting dict",valtype
+				val  = val.get_dict()
+	
+			elif valtype == "<type 'unicode'>":
+				#print "fixing unicode"
+				val  = unicodedata.normalize('NFKD', val).encode('ascii','ignore')
+	
+			elif valtype == "<type 'list'>":
+				#print "getting dict list"
+				for p in range( len(val) ):
+					valp     = val[p]
+					valtypep = str(type(valp))
+					if valtypep.startswith("<class "):
+						valp   = valp.get_dict()
+					elif valtype == "<type 'unicode'>":
+						#print "fixing unicode"
+						valp = unicodedata.normalize('NFKD', valp).encode('ascii','ignore')
+					
+					val[p]   = valp
+	
+			else:
+				#print "passing through"
+				pass
+	
+			res[ key ] = val
+	
+		return res
+	
+		pass
 
-Base.get_fields = get_fields
-Base.get_dict   = get_dict
 
 class Memory(Base):
-	__tablename__ = 'mem'
-	ltime     = Column(Float      , primary_key=True)
-	my_name   = Column(String(17 ), primary_key=True)
-	__table_args__ = (
-		ForeignKeyConstraint( ['ltime', 'my_name'], ['data_structure.ltime', 'data_structure.my_name'] ),
-	)
-	
-	total     = Column(Integer    )
-	available = Column(Integer    )
-	percent   = Column(Float      )
-	used      = Column(Integer    )
-	free      = Column(Integer    )
-	active    = Column(Integer    )
-	inactive  = Column(Integer    )
-	buffers   = Column(Integer    )
-	cached    = Column(Integer    )
-
 	def __init__(self, *args):
-		if	 len(args) == 11:
+		if	 len(args) == 9:
 			self.init_base(*args)
 
 		elif len(args) == 0:
@@ -145,8 +110,6 @@ class Memory(Base):
 		vmem           = psutil.virtual_memory()
 		#vmem(total=392007680L, available=129564672L, percent=66.9, used=381054976L, 
 		#free=10952704L, active=171753472, inactive=182312960, buffers=23056384L, cached=95555584)
-		self.ltime     = utime
-		self.my_name   = myName
 		self.total     = vmem.total
 		self.available = vmem.available
 		self.percent   = vmem.percent
@@ -157,10 +120,8 @@ class Memory(Base):
 		self.buffers   = vmem.buffers
 		self.cached    = vmem.cached
 
-	def init_base(self, ltime, my_name, total, available, percent, used, free, active, inactive, buffers, cached):
+	def init_base(self, total, available, percent, used, free, active, inactive, buffers, cached):
 		# print "init_base %f %d %d" % (ltime, free, used)
-		self.ltime     = ltime
-		self.my_name   = my_name
 		self.total     = total
 		self.available = available
 		self.percent   = percent
@@ -169,32 +130,14 @@ class Memory(Base):
 		self.active    = active
 		self.inactive  = inactive
 		self.buffers   = buffers
-		self.cached	   = cached
+		self.cached		= cached
 
 	def __repr__(self):
-		return "<Memory('%f', '%s', '%d', '%d', '%f', '%d', '%d', '%d', '%d', '%d', '%d')>" % ( self.ltime, self.my_name, self.total, self.available, self.percent, self.used, self.free, self.active, self.inactive, self.buffers, self.cached )
+		return "<Memory('%d', '%d', '%f', '%d', '%d', '%d', '%d', '%d', '%d')>" % ( self.total, self.available, self.percent, self.used, self.free, self.active, self.inactive, self.buffers, self.cached )
 
 class Cpu(Base):
-	__tablename__ = 'cpu'
-	ltime     = Column(Float      , primary_key=True)
-	my_name   = Column(String(17 ), primary_key=True)
-	__table_args__ = (
-		ForeignKeyConstraint( ['ltime', 'my_name'], ['data_structure.ltime', 'data_structure.my_name'] ),
-	)
-	
-	
-	user      = Column(Float      )
-	nice      = Column(Float      )
-	system    = Column(Float      )
-	idle      = Column(Float      )
-	iowait    = Column(Float      )
-	irq       = Column(Float      )
-	softirq   = Column(Float      )
-	numCpu    = Column(Integer    )
-	cpuPerc   = Column(String     )
-
 	def __init__(self, *args):
-		if	 len(args) == 12:
+		if	 len(args) == 10:
 			self.init_base(*args)
 
 		elif len(args) == 0:
@@ -212,8 +155,6 @@ class Cpu(Base):
 		cpuPerc       = ",".join([str(x) for x in cpuPerc])
 		#cputimes(user=3961.46, nice=169.729, system=2150.659, idle=16900.540, iowait=629.509, irq=0.0, softirq=19.422)
 		
-		self.ltime     = utime
-		self.my_name   = myName
 		self.user      = cputimes.user
 		self.nice      = cputimes.nice
 		self.system    = cputimes.system
@@ -224,10 +165,8 @@ class Cpu(Base):
 		self.numCpu    = numCpu
 		self.cpuPerc   = cpuPerc
 
-	def init_base(self, ltime, my_name, user, nice, system, idle, iowait, irq, softirq, numCpu, cpuPerc):
+	def init_base(self, user, nice, system, idle, iowait, irq, softirq, numCpu, cpuPerc):
 		# print "init_base %f %f %f %f %f %f %f %f %d" % (ltime, user, nice, system, idle, iowait, irq, softirq, numCpu, cpuPerc)
-		self.ltime     = ltime
-		self.my_name   = my_name
 		self.user      = user
 		self.nice      = nice
 		self.system    = system
@@ -239,26 +178,11 @@ class Cpu(Base):
 		self.cpuPerc   = cpuPerc
 
 	def __repr__(self):
-		return "<CPU('%f', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%d', '%s')>" % ( self.ltime, self.my_name, self.user, self.nice, self.system, self.idle, self.iowait, self.irq, self.softirq, self.numCpu, self.cpuPerc )
+		return "<CPU('%f', '%f', '%f', '%f', '%f', '%f', '%f', '%d', '%s')>" % ( self.user, self.nice, self.system, self.idle, self.iowait, self.irq, self.softirq, self.numCpu, self.cpuPerc )
 
 class Disk(Base):
-	__tablename__ = 'disk'
-	ltime	      = Column(Float      , primary_key=True)
-	my_name       = Column(String(17 ), primary_key=True)
-	__table_args__ = (
-		ForeignKeyConstraint( ['ltime', 'my_name'], ['data_structure.ltime', 'data_structure.my_name'] ),
-	)
-	
-	read_count    = Column(Integer    )
-	write_count   = Column(Integer    )
-	read_bytes    = Column(Integer    )
-	write_bytes   = Column(Integer    )
-	read_time     = Column(Integer    )
-	write_time    = Column(Integer    )
-	partitions    = relationship('Disk_partition', backref='disk', order_by='Disk_partition.mountpoint')
-	
 	def __init__(self, *args):
-		if	 len(args) == 9:
+		if	 len(args) == 7:
 			self.init_base(*args)
 
 		elif len(args) == 0:
@@ -272,21 +196,19 @@ class Disk(Base):
 		# print "init_self"
 		
 		partitions = psutil.disk_partitions()
+		self.partitions = []
 		for partition in sorted(partitions, key=lambda x:x.device):
 			#partition(device='/dev/sda1', mountpoint='/', fstype='ext4')
 			usage = psutil.disk_usage(partition.mountpoint)
 			#usage(total=21378641920, used=4809781248, free=15482871808, percent=22.5)
 
-			self.partitions.append( Disk_partition(	utime, 					myName,
-													partition.device,		partition.mountpoint,
+			self.partitions.append( Disk_partition(	partition.device,		partition.mountpoint,
 													partition.fstype,		usage.total,
 													usage.used,				usage.free,
 													usage.percent) )
 		
-		diskio		       = psutil.disk_io_counters()
+		diskio			    = psutil.disk_io_counters()
 		#iostat(read_count=719566, write_count=1082197, read_bytes=18626220032, write_bytes=24081764352, read_time=5023392, write_time=63199568)
-		self.ltime         = utime
-		self.my_name       = myName
 		self.read_count    = diskio.read_count
 		self.write_count   = diskio.write_count
 		self.read_bytes    = diskio.read_bytes
@@ -296,10 +218,8 @@ class Disk(Base):
 		
 		#print "GET FIELDS", self.get_dict()
 
-	def init_base(self, ltime, my_name, read_count, write_count, read_bytes, write_bytes, read_time, write_time, partitions):
+	def init_base(self, read_count, write_count, read_bytes, write_bytes, read_time, write_time, partitions):
 		# print "init_base %f " % (ltime)
-		self.ltime         = ltime
-		self.my_name       = my_name
 		self.read_count    = read_count
 		self.write_count   = write_count
 		self.read_bytes    = read_bytes
@@ -309,29 +229,11 @@ class Disk(Base):
 		self.partitions    = partitions
 
 	def __repr__(self):
-		return "<DISK('%f', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%s')>" % ( self.ltime, self.my_name, self.read_count, self.write_count, self.read_bytes, self.write_bytes, self.read_time, self.write_time, str(self.partitions) )
+		return "<DISK('%d', '%d', '%d', '%d', '%d', '%d', '%s')>" % ( self.read_count, self.write_count, self.read_bytes, self.write_bytes, self.read_time, self.write_time, str(self.partitions) )
 
 class Disk_partition(Base):
-	__tablename__ = 'disk_partition'
-	# id            = Column(Integer    , primary_key=True)
-	ltime	      = Column(Float      , primary_key=True)
-	my_name       = Column(String(17 ), primary_key=True)
-	__table_args__ = (
-		ForeignKeyConstraint( ['ltime', 'my_name'], ['disk.ltime', 'disk.my_name'] ),
-	)
-	
-	device        = Column(String     , primary_key=True)
-	mountpoint    = Column(String     )
-	fstype        = Column(String     )
-	total         = Column(Integer    )
-	used          = Column(Integer    )
-	free          = Column(Integer    )
-	percent       = Column(Float      )
-
-	def __init__(self, ltime, my_name, device, mountpoint, fstype, total, used, free, percent):
+	def __init__(self, device, mountpoint, fstype, total, used, free, percent):
 		# print "init_base %f " % (ltime)
-		self.ltime         = ltime
-		self.my_name       = my_name
 		self.device        = device
 		self.mountpoint    = mountpoint
 		self.fstype        = fstype
@@ -342,29 +244,11 @@ class Disk_partition(Base):
 
 	def __repr__(self):
 		# print ( self.id, self.ltime, self.device, self.mountpoint, self.fstype, self.total, self.used, self.free, self.percent )
-		return "<DISKPARTITION('%s', '%f', '%s', '%s', '%s', '%d', '%d', '%d', '%f')>" % ( str(self.id), self.ltime, self.device, self.mountpoint, self.fstype, self.total, self.used, self.free, self.percent )
+		return "<DISKPARTITION('%s', '%s', '%s', '%d', '%d', '%d', '%f')>" % ( \
+				self.device, self.mountpoint, self.fstype, self.total, self.used, self.free, self.percent )
 
 class Network_devices(Base):
-	__tablename__ = 'network_devices'
-	ltime         = Column(Float      , primary_key=True)
-	my_name       = Column(String(17 ), primary_key=True)
-	__table_args__ = (
-		ForeignKeyConstraint( ['ltime', 'my_name'], ['data_structure.ltime', 'data_structure.my_name'] ),
-	)
-	
-	dev_name      = Column(String     , primary_key=True)
-	bytes_sent    = Column(Integer    )
-	bytes_recv    = Column(Integer    )
-	packets_sent  = Column(Integer    )
-	packets_recv  = Column(Integer    )
-	errin         = Column(Integer    )
-	errout        = Column(Integer    )
-	dropin        = Column(Integer    )
-	dropout       = Column(Integer    )
-	mac           = Column(String(17 ))
-	ip            = Column(String(15 ))
-
-	def __init__(self, 	ltime, 			my_name,		dev_name, 
+	def __init__(self, 	dev_name, 
 						bytes_sent, 	bytes_recv, 
 						packets_sent, 	packets_recv, 
 						errin, 			errout, 
@@ -372,8 +256,6 @@ class Network_devices(Base):
 						mac,			ip):
 		# {'lo' : iostat(bytes_sent=799953745, bytes_recv=799953745 , packets_sent=453698 , packets_recv=453698 , errin=0, errout=0, dropin=0, dropout=0), 
 		# print "init_base %f " % (ltime)
-		self.ltime        = ltime
-		self.my_name      = my_name
 		self.dev_name     = dev_name
 		self.bytes_sent   = bytes_sent
 		self.bytes_recv   = bytes_recv
@@ -387,51 +269,10 @@ class Network_devices(Base):
 		self.ip           = ip
 
 	def __repr__(self):
-		return "<NETWORKDEVICES('%d', '%f', '%s', '%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%s', '%s')>" % ( self.id, self.ltime, self.my_name, self.dev_name, self.bytes_sent, self.bytes_recv, self.packets_sent, self.packets_recv, self.errin, self.errout, self.dropin, self.dropout, self.mac, self.ip )
+		return "<NETWORKDEVICES('%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%d', '%s', '%s')>" % ( self.dev_name, self.bytes_sent, self.bytes_recv, self.packets_sent, self.packets_recv, self.errin, self.errout, self.dropin, self.dropout, self.mac, self.ip )
 
 class Process_info(Base):
-	__tablename__           = 'process_info'
-	ltime                   = Column(Float      , primary_key=True)
-	my_name                 = Column(String(17 ), primary_key=True)
-	__table_args__ = (
-		ForeignKeyConstraint( ['ltime', 'my_name'], ['data_structure.ltime', 'data_structure.my_name'] ),
-	)
-	
-	procnum                 = Column(Integer    , primary_key=True)
-	name                    = Column(String     )
-	exe                     = Column(String     )
-	cwd                     = Column(String     )
-	cmdline                 = Column(String     )
-	status                  = Column(Integer    )
-	username                = Column(String     )
-	create_time             = Column(Float      )
-	uids_real               = Column(Integer    )
-	uids_effective          = Column(Integer    )
-	uids_saved              = Column(Integer    )
-	gids_real               = Column(Integer    )
-	gids_effective          = Column(Integer    )
-	gids_saved              = Column(Integer    )
-	cpu_times_user          = Column(Float      )
-	cpu_times_system        = Column(Float      )
-	cpu_affinity            = Column(String     )
-	memory_percent          = Column(Float      )
-	mem_info_rss            = Column(Integer    )
-	mem_info_vms            = Column(Integer    )
-	mem_info_shared         = Column(Integer    )
-	mem_info_text           = Column(Integer    )
-	mem_info_lib            = Column(Integer    )
-	mem_info_data           = Column(Integer    )
-	mem_info_dirty          = Column(Integer    )
-	io_counters_read_count  = Column(Integer    )
-	io_counters_write_count = Column(Integer    )
-	io_counters_read_bytes  = Column(Integer    )
-	io_counters_write_bytes = Column(Integer    )
-	nice                    = Column(Integer    )
-	num_threads             = Column(Integer    )
-	num_fds                 = Column(Integer    )
-
-
-	def __init__(self,	ltime,						my_name,					procnum,
+	def __init__(self,	procnum,
 						name,						exe,						cwd,
 						cmdline,					status,						username,
 						create_time,				uids_real,					uids_effective,
@@ -446,7 +287,6 @@ class Process_info(Base):
 						):
 
 		self.procnum                 = procnum
-		self.my_name                 = my_name
 		self.name                    = name
 		self.exe                     = exe
 		self.cwd                     = cwd
@@ -481,8 +321,7 @@ class Process_info(Base):
 
 	def __repr__(self):
 		res_str = []
-		for val in 	self.id,						self.ltime,\
-					self.my_name,					self.procnum,\
+		for val in 	self.procnum,\
 					self.name,						self.exe,						self.cwd,\
 					self.cmdline,					self.status,					self.username,\
 					self.create_time,				self.uids_real,					self.uids_effective,\
@@ -505,23 +344,8 @@ class Process_info(Base):
 		return "<PROCESSINFO(%s)>" % ( " ".join( res_str ) )
 
 class Data_structure(Base):
-	__tablename__ = 'data_structure'
-
-	ltime         = Column(Float      , primary_key=True)
-	my_name       = Column(String(17 ), primary_key=True)
-
-	#primaryjoin=(ltime==Memory.ltime), secondaryjoin=(my_name==Memory.my_name), , foreignkeys=Memory.ltime
-	# primaryjoin=ltime==Memory.ltime, secondaryjoin=(my_name==Memory.my_name),
-	memories      = relationship('Memory'         , backref='data_structure', order_by="Memory.ltime"         )
-	cpus          = relationship('Cpu'            , backref='data_structure', order_by="Cpu.ltime"            )
-	disks         = relationship('Disk'           , backref='data_structure', order_by="Disk.ltime"           )
-	net_devices   = relationship('Network_devices', backref='data_structure', order_by="Network_devices.ltime")
-	process_info  = relationship('Process_info'   , backref='data_structure', order_by="Process_info.ltime"   )
-	# processes     = relationship('Process'        , backref='data_structure', order_by="Process.ltime")
-	# networks      = relationship('Network'        , backref='data_structure', order_by="Network.ltime")
-
 	def __init__(self, *args):
-		if	 len(args) == 7:
+		if	 len(args) == 5:
 			self.init_base(*args)
 
 		elif len(args) == 0:
@@ -532,31 +356,26 @@ class Data_structure(Base):
 			sys.exit( 1 )
 
 	def init_self(self):
-		self.ltime    = utime
-		self.my_name  = myName
-
-		self.memories.append(  Memory()  )
-		self.cpus.append(      Cpu()     )
-		self.disks.append(     Disk()    )
+		self.memories = Memory()
+		self.cpus     = Cpu()
+		self.disks    = Disk()
 		# self.networks.append(  Network() )
 		# self.processes.append( Process() )
 		self.Network()
 		self.Process()
 		
-	def init_base(self, ltime, my_name, lmemories, lcpus, ldisks, lnetworks, lprocesses):
+	def init_base(self, memories, cpus, disks, net_devices, process_info):
 		# print "init_base %f %s" % (ltime, net_devices)
-		self.ltime     = ltime
-		self.my_name   = my_name
-		self.memories  = lmemories
-		self.cpus      = lcpus
-		self.disks     = ldisks
-		self.networks  = lnetworks
-		self.processes = lprocesses
+		self.memories     = memories
+		self.cpus         = cpus
+		self.disks        = disks
+		self.net_devices  = net_devices
+		self.process_info = process_info
 
 	def get_fields(self):
 		# return self.__dict__.keys()
 		# return ['ltime', 'my_name', 'memories', 'cpus', 'disks', 'networks', 'processes']
-		return ['ltime', 'my_name', 'memories', 'cpus', 'disks', 'net_devices', 'process_info']
+		return ['memories', 'cpus', 'disks', 'net_devices', 'process_info']
 	
 	def Network(self):
 		# print "init_self"
@@ -565,7 +384,7 @@ class Data_structure(Base):
 		# {'lo' : iostat(bytes_sent=799953745, bytes_recv=799953745 , packets_sent=453698 , packets_recv=453698 , errin=0, errout=0, dropin=0, dropout=0), 
 		# 'eth0': iostat(bytes_sent=734324837, bytes_recv=4163935363, packets_sent=3605828, packets_recv=4096685, errin=0, errout=0, dropin=0, dropout=0)}
 		
-		
+		self.net_devices = []
 		for net in sorted(nets):
 			netdata = nets[ net ]
 			
@@ -573,8 +392,7 @@ class Data_structure(Base):
 			mac     = ifdata[netifaces.AF_LINK][0]['addr']
 			ip      = ifdata[2                ][0]['addr']
 			
-			nd = Network_devices( 	utime				, myName,
-									net,
+			nd = Network_devices( 	net,
 									netdata.bytes_sent  , netdata.bytes_recv, 
 									netdata.packets_sent, netdata.packets_recv, 
 									netdata.errin       , netdata.errout, 
@@ -587,9 +405,11 @@ class Data_structure(Base):
 		pces   = psutil.get_pid_list()
 		# [1, 2, 3, 4, 5, 6, 7, 46
 		
+		self.process_info = []
+		
 		for procnum in sorted(pces):
 			try:
-				procinfo                = psutil.Process(procnum)
+				procinfo            = psutil.Process(procnum)
 			except:
 				continue
 			
@@ -607,7 +427,7 @@ class Data_structure(Base):
 				
 			cmdline                 = procinfo.cmdline
 			cmdline                 = " ".join( cmdline )
-			status                  = procinfo.status
+			status                  = str(procinfo.status)
 			username                = procinfo.username
 			create_time             = procinfo.create_time
 			uids                    = procinfo.uids
@@ -668,7 +488,7 @@ class Data_structure(Base):
 
 			# p.get_connections()
 			# [connection(fd=115, family=2, type=1, local_address=('10.0.0.1', 48776),
-            # remote_address=('93.186.135.91', 80), status='ESTABLISHED'),
+			# remote_address=('93.186.135.91', 80), status='ESTABLISHED'),
 
 			# threads             = procinfo.get_threads()
 			# threads_id          = thread
@@ -676,7 +496,7 @@ class Data_structure(Base):
 			# threads_system_time = system_time
 			
 			
-			pi = Process_info(	utime, 						myName,						procnum,
+			pi = Process_info(	procnum,
 								name,						exe,						cwd,
 								cmdline,					status,						username,
 								create_time,				uids_real,					uids_effective,
@@ -692,22 +512,21 @@ class Data_structure(Base):
 			self.process_info.append(pi)
 	
 	def __repr__(self):
-		return "<DATASTRUCT('%f', '%s', '%s', '%s', '%s', '%s', '%s')>" % ( self.ltime, self.my_name, self.memories, self.cpus, self.disks, self.networks, self.processes )
+		return "<DATASTRUCT('%s', '%s', '%s', '%s', '%s')>" % ( self.memories, self.cpus, self.disks, self.networks, self.processes )
 
 class DataManager(object):
 	def __init__(self, numReport, echo=False):
 		self.numReport = numReport
 		print "      DataManager: loading engine"
-		self.engine    = create_engine( db_path, echo=echo )
+		
+		self.db = Database(db_path)
 		
 		print "      DataManager: creating database"
-		Base.metadata.create_all(       self.engine     )
 		
-		print "      DataManager: creating session"
-		self.Session    = sessionmaker( bind=self.engine )
-		
-		print "      DataManager: initializing session"
-		self.session    = self.Session()
+		try:
+			self.db.create()
+		except IndexConflict:
+			self.db.open()
 		
 		self.data       = None
 		self.qry        = None
@@ -718,32 +537,54 @@ class DataManager(object):
 		
 		print "      DataManager: utime", utime, time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 		print "      DataManager: creating data structure"
+		
 		self.data = Data_structure()
+		
 		print "      DataManager: adding data"
-		self.session.add( self.data )
-		print "      DataManager: commiting"
-		self.session.commit()
+
+		#key = myName+";"+str(utime)
+		key = (myName, utime)
+		
+		print "      DataManager: key",key
+		
+		print self.db.insert(dict( key=self.data.get_dict() ))
+
 		print "      DataManager: done"
+
+	def count(self):
+		return self.db.count(self.db.all, 'id')
 
 	def load(self, reps=None):
 		if reps is None:
 			reps = self.numReport
 		
-		print "      DataManager: querying"
-		self.qry = self.session.query( Data_structure ).order_by( Data_structure.ltime )[reps:]
-		print "      DataManager: done"
-		
-		return self.qry
+		print "      DataManager: querying. length:", reps
 
-	def get_dict(self):
-		self.load()
-		res = []
-		for qry in self.qry:
-			# print "qry", qry
-			r = qry.get_dict()
-			# print "  ", r
-			res.append( r )
-		return res
+		kwargs = { 'with_doc': False }
+
+		count  = self.count()
+
+		if reps > 0:
+			if  count > reps:
+				limit  = reps
+				offset = count - reps
+				kwargs['limit' ] = limit
+				kwargs['offset'] = offset
+				print "      DataManager: length:", reps,"count:",count,"limit:",limit,"offset:",offset
+			else:
+				print "      DataManager: length:", reps,"count:",count
+
+
+		currs  = []
+		for curr in self.db.all('id', **kwargs):
+			currs.append( curr )
+
+		print "      DataManager: done. length:", len(currs)
+		
+		return currs
+
+	def get_dict(self, reps=None):
+		return self.load(reps=reps)
 
 def getName():
 	if not os.path.exists(myNameFile):
@@ -803,6 +644,7 @@ def main():
 	if test:
 		print "    loading"
 		res = data.get_dict()
+		print "    length:", data.count(), "res:",len(res)
 		print "    printing"
 		pp( res )
 	
