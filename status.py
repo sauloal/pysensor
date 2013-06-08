@@ -12,9 +12,9 @@ import zmq
 print "importing netifaces"
 import netifaces
 
-print "importing codernity"
-from CodernityDB.database   import Database
-from CodernityDB.tree_index import TreeBasedIndex
+print "importing cpyckle"
+import cPickle as pickler
+pycklerext = '.cpyc'
 print "finished importing"
 
 test       = True
@@ -513,37 +513,17 @@ class Data_structure(Base):
 	def __repr__(self):
 		return "<DATASTRUCT('%s', '%s', '%s', '%s', '%s')>" % ( self.memories, self.cpus, self.disks, self.networks, self.processes )
 
-class WithXIndex(TreeBasedIndex):
-
-	def __init__(self, *args, **kwargs):
-		kwargs['node_capacity'] = 10
-		kwargs['key_format'   ] = 'Q'
-		super(WithXIndex, self).__init__(*args, **kwargs)
-
-	def make_key_value(self, data):
-		t_val = data.get('x')
-		if t_val is not None:
-			return t_val, None
-		return None
-
-	def make_key(self, key):
-		return key
-
 class DataManager(object):
-	def __init__(self, numReport, echo=False):
-		self.numReport = numReport
+	def __init__(self, db_path="status.cdb", numReport=5, echo=False):
 		print "      DataManager: loading engine"
 		
-		self.db = Database(db_path)
+		self.numReport = numReport
+		self.db_path   = db_path
 		
 		print "      DataManager: creating database"
 		
-		if self.db.exists():
-			self.db.open()
-		else:
-			self.db.create()
-			self.D_ind = WithXIndex(self.db.path, 'D')
-			self.db.add_index(self.D_ind)
+		if not os.path.exists( self.db_path ):
+			os.makedirs( self.db_path )
 		
 		self.data       = None
 		self.qry        = None
@@ -559,18 +539,34 @@ class DataManager(object):
 		
 		print "      DataManager: adding data"
 
-		#key = myName+";"+str(utime)
+		key = myName+"@"+str(utime)
 		#key = (myName, utime)
-		key = utime
+		#key = utime
 		
 		print "      DataManager: key",key
 		
-		print self.db.insert( { key:{myName: self.data.get_dict()} } )
+		fn = os.path.join( self.db_path, key + pycklerext)
+		dic = self.data.get_dict()
+		pickler.dump(dic, db)
 
 		print "      DataManager: done"
 
+	def list(self):
+		files = []
+		if not os.path.exists(self.db_path):
+			return None
+		else:
+			for fn in os.listdir(self.db_path):
+				if not fn.endswith( pycklerext ): continue
+				utime, my_name = os.path.basename(fn).replace( pycklerext , '').split( '@' )
+				files.append( [ fn, float(utime), my_name ])
+		
+		files.sort( key=lambda x: x[1], reverse=True)
+		
+		return files
+	
 	def count(self):
-		return self.db.count(self.db.all, 'id')
+		return len(self.list)
 
 	def load(self, reps=None):
 		if reps is None:
@@ -578,10 +574,10 @@ class DataManager(object):
 		
 		print "      DataManager: querying. length:", reps
 
-		kwargs = { 'with_doc': False }
-
 		count  = self.count()
-
+		offset = 0
+		limit  = count
+		
 		if reps > 0:
 			if  count > reps:
 				limit  = reps
@@ -589,17 +585,21 @@ class DataManager(object):
 				kwargs['limit' ] = limit
 				kwargs['offset'] = offset
 				print "      DataManager: length:", reps,"count:",count,"limit:",limit,"offset:",offset
+	
 			else:
 				print "      DataManager: length:", reps,"count:",count
 
 
-		currs  = []
-		for curr in self.db.all('id', **kwargs):
-			currs.append( curr )
+		files    = self.list()
+		subfiles = files[offset:limit]
+		
+		currs = {}
+		for fn,utime,my_name in subfiles:
+			if utime not in currs: currs[ utime ] = {}
+			currs[ utime ][ my_name ] = pickler.load( fn )
 
 		print "      DataManager: done. length:", len(currs)
-		print "      DataManager: details", self.db.get_db_details()
-		
+
 		return currs
 
 	def get_dict(self, reps=None):
