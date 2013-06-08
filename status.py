@@ -1,8 +1,9 @@
 #!/usr/bin/python
 import sys, os
 import time
-from pprint import pprint as pp
 import unicodedata
+import shutil
+from pprint  import pprint     as pp
 from inspect import isfunction
 
 print "importing psutil"
@@ -13,15 +14,31 @@ print "importing netifaces"
 import netifaces
 
 print "importing cpyckle"
-import cPickle as pickler
+import cPickle
 pycklerext = '.cpyc'
 print "finished importing"
 
-test       = True
+test       = False
 numReport  = 2
 myNameFile = '.status'
 
-db_path    = 'status.cod'
+dbPath     = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "status.cdb")
+def_min    = 60
+def_hour   = 60 * def_min  # 1 hour
+def_day    = 24 * def_hour # 1 day
+# at a rate of 1 per minute: 60 * 24 = 1440
+maxages    = { # 842 in total
+	'1h' : [ 1 * def_hour,   2 * def_min ], # older than  1 hour, saves every  2 min
+	'2h' : [ 2 * def_hour,   2 * def_min ], # older than  1 hour, saves every  2 min
+	'4h' : [ 4 * def_hour,   3 * def_min ], # older than  1 hour, saves every  2 min
+	'1d' : [ 1 * def_day ,   5 * def_min ], # older than  1 day , saves every  5 min   (288 per day *  1 = 288)
+	'3d' : [ 3 * def_day ,  10 * def_min ], # older than  3 days, saves every 10 min   (144 per day *  2 = 288)
+	'5d' : [ 5 * def_day ,  50 * def_min ], # older than  5 days, saves every 30 min   ( 48 per day *  2 =  96)
+	'10d': [10 * def_day ,       def_hour], # older than 10 days, saves every  1 hour  ( 24 per day *  5 = 120)
+	'20d': [20 * def_day ,   4 * def_hour], # older than 20 days, saves every  4 hours (  5 per day * 10 =  50)
+} # number of minutes: time
+# 1440 + 842 = 2282
+# 2282 * 28k = 60.4Mb
 
 #apt-get install python-pip
 #apt-get install python-dev
@@ -36,6 +53,31 @@ utime     = time.time()
 myName    = None
 forbidden = []
 
+class pickler(object):
+	def __init__(self, db_path, ext):
+		self.db_path = db_path
+		self.ext     = ext
+	
+	def getFn(self, key):
+		if not key.endswith(self.ext):
+			key += self.ext
+		if not key.startswith(self.db_path):
+			key = os.path.join( self.db_path, key)
+		return key
+	
+	def save(self, key, data):
+		fn = self.getFn(key)
+		print "       Pickler. saving to:",fn
+		with open(fn, 'wb') as fhd:
+			cPickle.dump(data, fhd)
+	
+	def load(self, key):
+		fn = self.getFn(key)
+		print "       Pickler. loading from:",fn
+		data = None
+		with open(fn, 'rb') as fhd:
+			data = cPickle.load(fhd)
+		return data
 
 class Base(object):
 	def get_fields(self):
@@ -514,21 +556,109 @@ class Data_structure(Base):
 		return "<DATASTRUCT('%s', '%s', '%s', '%s', '%s')>" % ( self.memories, self.cpus, self.disks, self.networks, self.processes )
 
 class DataManager(object):
-	def __init__(self, db_path="status.cdb", numReport=5, echo=False):
+	def __init__(self, db_path=dbPath, ext=pycklerext, echo=False):
 		print "      DataManager: loading engine"
 		
-		self.numReport = numReport
 		self.db_path   = db_path
+		self.ext       = ext
+		self.pickler   = pickler(self.db_path, ext)
+		self.data      = None
+		self.qry       = None
 		
-		print "      DataManager: creating database"
+		print "      DataManager: creating database", self.db_path
 		
 		if not os.path.exists( self.db_path ):
 			os.makedirs( self.db_path )
+
+	def clean(self):
+		files    = self.list()
+		subfiles = []
 		
-		self.data       = None
-		self.qry        = None
-	
+		maxage     = 0
+		minage     = 99999999999
+		maxagename = None
+		minagename = None
+		for sincename in maxages:
+			since = maxages[sincename][0]
+			if since > maxage:
+				maxage     = since
+				maxagename = sincename
+				
+			if since < minage:
+				minage     = since
+				minagename = sincename
+		
+		now     = time.time()
+		mintime = now - minage
+		maxtime = now - maxage
+		
+		print '  minage',minage,'minagename',minagename,'maxage',maxage,'maxagename',maxagename,'now',now,'mintime',mintime,'maxtime',maxtime
+		
+		groupings = {}
+		count     = 0
+		
+		for data in files:
+			count += 1
+			fn, utime, my_name = data
+			#print '  ',count,'fn',fn,'utime',utime,'my_name',my_name
+		
+			if utime > mintime:
+				#print '    ',count,'utime',utime,'> mintime',mintime,'newer than mintime',minagename,'. skipping\n'
+				continue
+			
+			if utime < maxtime:
+				#print '    ',count,'utime',utime,'< maxtime',maxtime,'older than maxtime',maxagename,'.compulsory deleting'
+				subfiles.append( data )
+				continue
+			
+			for sincename in sorted(maxages, reverse=True, key=lambda x: maxages[x][0]):
+				since = maxages[sincename][0]
+				dtime = now - since
+				#print '    ',count,'dtime',dtime,'sincename',sincename
+				
+				if utime < dtime:
+					#print '      ',count,'utime',utime,'< dtime',dtime,'sincename',sincename,'appending',sincename,'\n'
+					if sincename not in groupings:
+						groupings[sincename] = []
+					groupings[sincename].append(data)
+					break
+		
+		for sincename in groupings:
+			datas = groupings[sincename]
+			since = maxages[  sincename][0]
+			every = maxages[  sincename][1]
+			print '    since name',sincename,'since',since,'every',every#,'datas',datas,'\n'
+			
+			lastdata      = datas[0]
+			lastdatautime = lastdata[1]
+			
+			for data in sorted( datas[1:], key=lambda x: x[1], reverse=True ):
+				utime = data[1]
+				diff  = lastdatautime - utime
+				
+				if diff < every:
+					#print '      data utime %.2f < lastdatautime %.2f diff %5d - deleting' % (utime, lastdatautime, diff)
+					subfiles.append( data )
+					
+				else:
+					#print '      data utime %.2f > lastdatautime %.2f diff %5d - keeping'  % (utime, lastdatautime, diff)
+					lastdata      = data
+					lastdatautime = data[1]
+		
+		dcount = 0
+		scount = len(subfiles)
+		for filedata in subfiles:
+			filename = filedata[0]
+			dcount += 1
+			#print "      %4d/%4d/%4d - moving %s to %s" % ( dcount, scount, count, filename[0], filename[0]+'.bkp' )
+			shutil.move( os.path.join(self.db_path, filename), os.path.join(self.db_path, filename+'.bkp'))
+		
+		print "      moved %4d/%4d files" % ( scount, count )
+
+
 	def update(self):
+		self.clean()
+		
 		global utime
 		utime     = time.time()
 		
@@ -539,15 +669,14 @@ class DataManager(object):
 		
 		print "      DataManager: adding data"
 
-		key = myName+"@"+str(utime)
+		key = "%.2f@%s" % ( utime, myName )
 		#key = (myName, utime)
 		#key = utime
 		
 		print "      DataManager: key",key
 		
-		fn = os.path.join( self.db_path, key + pycklerext)
 		dic = self.data.get_dict()
-		pickler.dump(dic, db)
+		self.pickler.save(key, dic)
 
 		print "      DataManager: done"
 
@@ -566,44 +695,60 @@ class DataManager(object):
 		return files
 	
 	def count(self):
-		return len(self.list)
+		return len(self.list())
 
-	def load(self, reps=None):
-		if reps is None:
-			reps = self.numReport
-		
+	def loadlast(self, reps=None):
 		print "      DataManager: querying. length:", reps
 
 		count  = self.count()
 		offset = 0
-		limit  = count
 		
 		if reps > 0:
 			if  count > reps:
-				limit  = reps
+				#limit  = reps
 				offset = count - reps
-				kwargs['limit' ] = limit
-				kwargs['offset'] = offset
-				print "      DataManager: length:", reps,"count:",count,"limit:",limit,"offset:",offset
+				print "      DataManager: length:", reps,"count:",count,"offset:",offset
 	
 			else:
 				print "      DataManager: length:", reps,"count:",count
 
 
 		files    = self.list()
-		subfiles = files[offset:limit]
+		subfiles = files[offset:]
+		return self.loadfiles( subfiles )
+	
+	def loadtime(self, begin=None, end=None):
+		files    = self.list()
+		if begin is None and end is None: return self.loadfiles( files )
 		
+		subfiles = []
+		
+		for data in files:
+			fn,utime,my_name = data
+			if begin is not None:
+				if utime < begin: continue
+			if end is not None:
+				if utime > end: continue
+			subfiles.append( data )
+			
+		return self.loadfiles( subfiles )
+
+	def loadfiles(self, files):
 		currs = {}
-		for fn,utime,my_name in subfiles:
+		for fn,utime,my_name in files:
+			print "        DataManager: loading fn:",fn,"time:",utime,"name:",my_name
 			if utime not in currs: currs[ utime ] = {}
-			currs[ utime ][ my_name ] = pickler.load( fn )
+			currs[ utime ][ my_name ] = self.pickler.load( fn )
 
 		print "      DataManager: done. length:", len(currs)
 
 		return currs
 
-	def get_dict(self, reps=None):
-		return self.load(reps=reps)
+	def get_dict(self, reps=None, begin=None, end=None):
+		if reps is not None:
+			return self.loadlast(reps=reps)
+		else:
+			return self.loadtime(begin=begin, end=end)
 
 def getName():
 	if not os.path.exists(myNameFile):
@@ -637,7 +782,7 @@ def getName():
 		
 	return mac
 
-def main():
+def main_client():
 	#http://docs.sqlalchemy.org/en/rel_0_8/orm/tutorial.html
 	
 	global myName
@@ -646,7 +791,7 @@ def main():
 	print "  name:", myName
 	
 	print "  initializing"
-	data   = DataManager(numReport)
+	data   = DataManager()
 	
 	print "  gathering data"
 	
@@ -662,19 +807,22 @@ def main():
 
 	if test:
 		print "    loading"
-		res = data.get_dict()
+		res = data.get_dict(reps=numReport)
 		print "    length:", data.count(), "res:",len(res)
 		print "    printing"
-		pp( res )
+		#pp( res )
 	
 	print "  done\n"
 
 
 
-if __name__ == "__main__": 
-	if   __file__ in [ 'client.py', 'status.py' ]:
+if __name__ == "__main__":
+	print __file__
+	
+	if   os.path.basename(__file__) in [ 'client.py', 'status.py' ]:
 		print "calling client main"
-		main()
+		main_client()
+		
 	elif __file__ in [ 'server.py' ]:
 		#http://zguide.zeromq.org/py:all
 		#http://zguide.zeromq.org/py:taskwork
