@@ -770,11 +770,14 @@ def getName():
 		# 'eth0': iostat(bytes_sent=734324837, bytes_recv=4163935363, packets_sent=3605828, packets_recv=4096685, errin=0, errout=0, dropin=0, dropout=0)}
 		
 		mac = None
+		ip  = None
 		for net in sorted(nets):
 			netdata = nets[ net ]
 			
 			ifdata = netifaces.ifaddresses(net)
 			mac    = ifdata[netifaces.AF_LINK][0]['addr']
+			ip     = ifdata[2                ][0]['addr']
+
 			if mac != '00:00:00:00:00:00':
 				break
 		
@@ -793,14 +796,14 @@ def getName():
 		print "not able to get MAC", mac
 		sys.exit(1)
 		
-	return mac
+	return [mac, ip]
 
 def main_client():
 	#http://docs.sqlalchemy.org/en/rel_0_8/orm/tutorial.html
 	
 	global myName
 	print "  getting name"
-	myName = getName()
+	myName = getName()[0]
 	print "  name:", myName
 	
 	print "  initializing"

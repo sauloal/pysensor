@@ -1,336 +1,193 @@
 #!/usr/bin/python
 import sys, os
 import time
-import unicodedata
+
+print "importing signal"
 import signal
 
-print "importing zmq"
-import zmq
+print "importing queue"
+import Queue
+
+print "importing simple json"
+import simplejson
+
+print "importing jsonpickle"
+import jsonpickle
 
 print "importing socket"
 import socket
 
-print "importing cpyckle"
+print "importing cpickle"
 import cPickle
 
 print "importing threading"
 import threading
 
-print "importing renadom"
-from random import choice
 
 print "finished importing"
 
-sys.path.insert(0, '.')
-import status
 
-dbPath           = status.dbPath
-pycklerext       = status.pycklerext
-myName           = status.getName()
-PING_PORT_NUMBER = 9999
-PING_MSG_SIZE    = 1
-PING_INTERVAL    = 1  # Once per second
-
-print "  name:", myName
+PING_PORT_NUMBER  =   9999
+PING_MSG_SIZE     = 1
+PING_INTERVAL     = 1  # Once per second
+PING_MESSAGE_SIZE = 10000
 
 
 
-class UDP(object):
-	"""simple UDP ping class"""
-	handle = None   # Socket for send/recv
-	port = 0        # UDP port we work on
-	address = ''    # Own address
-	broadcast = ''  # Broadcast address
-
-	def __init__(self, port, address=None, broadcast=None):
-		if address is None:
-			local_addrs = socket.gethostbyname_ex(socket.gethostname())[-1]
-			for addr in local_addrs:
-				if not addr.startswith('127'):
-					address = addr
-		if broadcast is None:
-			broadcast = '255.255.255.255'
-
-		self.address = address
-		self.broadcast = broadcast
-		self.port = port
-		# Create UDP socket
-		self.handle = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-
-		# Ask operating system to let us do broadcasts from socket
-		self.handle.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-		# Bind UDP socket to local port so we can receive pings
-		self.handle.bind(('', port))
-
-	def send(self, buf):
-		self.handle.sendto(buf, 0, (self.broadcast, self.port))
-
-	def recv(self, n):
-		buf, addrinfo = self.handle.recvfrom(n)
-		if addrinfo[0] != self.address:
-			print("Found peer %s:%d" % addrinfo)
-
-class broadcaster(threading.Thread):
-	"""broadcaster"""
-	def __init__(self):
+class broadcast_server(threading.Thread):
+	def __init__(self, message):
 		threading.Thread.__init__ (self)
 		self.kill_received = False
+		self.message       = message
 
 	def run(self):
-		print "UDP: running"
-		udp    = UDP(PING_PORT_NUMBER)
-		poller = zmq.Poller()
-		print "UDP: running: registering"
-		poller.register(udp.handle, zmq.POLLIN)
-	
-		# Send first ping right away
-		ping_at = time.time()
-	
-		while not self.kill_received:
-			timeout = ping_at - time.time()
-			if timeout  < 0:
-				timeout = 0
-			try:
-				events = dict(poller.poll(1000* timeout))
-			except KeyboardInterrupt:
-				print("interrupted")
-				break
-	
-			# Someone answered our ping
-			if udp.handle.fileno() in events:
-				udp.recv(PING_MSG_SIZE)
-	
-			if time.time() >= ping_at:
-				# Broadcast our beacon
-				print ("Pinging peers...")
-				udp.send('!')
-				ping_at = time.time() + PING_INTERVAL
-
-		print "UDP: running: leaving"
-
-
-class ClientTask(threading.Thread):
-	"""ClientTask"""
-	def __init__(self, context):
-		threading.Thread.__init__ (self)
-		self.context       = context
-		self.kill_received = False
-
-	def run(self):
-		print "CLIENT: running"
-		socket   = self.context.socket(zmq.DEALER)
-		identity = 'worker-%d' % (choice([0,1,2,3,4,5,6,7,8,9]))
+		my_socket = socket.socket(socket.AF_INET   , socket.SOCK_DGRAM    )
+		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_BROADCAST,1)
 		
-		socket.setsockopt(zmq.IDENTITY, identity )
-		socket.setsockopt(zmq.LINGER  , 1        )
-		socket.connect('tcp://localhost:5570')
-		
-		print 'CLIENT: running. Client %s started' % (identity)
-		poll = zmq.Poller()
-		poll.register(socket, zmq.POLLIN)
-		reqs = 0
+		print 'starting UDP CLIENT ...'
 		
 		while not self.kill_received:
-			for i in xrange(5):
-				sockets = dict(poll.poll(1000))
-				if socket in sockets:
-					if sockets[socket] == zmq.POLLIN:
-						msg = socket.recv()
-						print 'CLIENT: running. Client %s received: %s\n' % (identity, msg)
-						del msg
+			if message is not None:
+				my_socket.sendto(self.message, ('<broadcast>' ,PING_PORT_NUMBER))
+				my_socket.close()
 			
-			reqs = reqs + 1
-			print 'CLIENT: running. Req #%d sent..' % (reqs)
-			socket.send('request #%d' % (reqs))
+			time.sleep( 1 )
 
-		print "CLIENT: running. ending client"
 
-		print "CLIENT: running. closing socket"
-		socket.close()
-
-		print "CLIENT: running. termination context"
-		self.context.term()
-
-		print "CLIENT: running. done"
-
-class ServerTask(threading.Thread):
-	"""ServerTask"""
-	def __init__(self, context):
+class broadcast_client(threading.Thread):
+	def __init__(self, reqs):
 		threading.Thread.__init__ (self)
-		self.context       = context
 		self.kill_received = False
+		self.reqs          = reqs
 
 	def run(self):
-		print "SERVER: running"
-		frontend = self.context.socket(zmq.ROUTER)
-		frontend.bind('tcp://*:5570')
-		frontend.setsockopt(zmq.LINGER  , 1        )
-
-		print "SERVER running: backend"
-		backend  = self.context.socket(zmq.DEALER)
-		backend.bind('inproc://backend')
-		backend.setsockopt(zmq.LINGER  , 1        )
-
-		print "SERVER running: pool"
-		poll = zmq.Poller()
-		poll.register(frontend, zmq.POLLIN)
-		poll.register(backend,  zmq.POLLIN)
-
+		my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+		my_socket.bind(('',PING_PORT_NUMBER))
+	
+		print 'starting UDP CLIENT ...'
+	
 		while not self.kill_received:
-			sockets = dict(poll.poll())
-			if frontend in sockets:
-				if sockets[frontend] == zmq.POLLIN:
-					_id = frontend.recv()
-					msg = frontend.recv()
-					print 'SERVER running: Server received %s id %s\n' % (msg, _id)
-					backend.send(_id, zmq.SNDMORE)
-					backend.send(msg)
+			message , address = my_socket.recvfrom( PING_MESSAGE_SIZE )
+			
+			self.reqs.put( [ address, int(str(message)) ] )
 
-			if backend in sockets:
-				if sockets[backend] == zmq.POLLIN:
-					_id = backend.recv()
-					msg = backend.recv()
-					print 'SERVER running: Sending to frontend %s id %s\n' % (msg, _id)
-					frontend.send(_id, zmq.SNDMORE)
-					frontend.send(msg)
-		print "SERVER running: closing"
+
+
+
+
+
+
+
+class data_client(threading.Thread):
+	def __init__(self, reqs, dbPath, pycklerext, myName):
+		threading.Thread.__init__ (self)
+		self.kill_received = False
+		self.reqs          = reqs
 		
-		frontend.close()
-		backend.close()
-		self.context.term()
-
-class ServerWorker(threading.Thread):
-	"""ServerWorker"""
-	def __init__(self, context):
-		threading.Thread.__init__ (self)
-		self.context       = context
-		self.kill_received = False
+		self.dbPath        = dbPath
+		self.pycklerext    = pycklerext
+		self.myName        = myName
+		self.data          = status.DataManager(db_path=dbPath, ext=pycklerext)
+		
+		self.last_ip       = None
+		self.last_port     = None
 
 	def run(self):
-		print "WORKER running"
-		worker = self.context.socket(zmq.DEALER)
-		worker.connect('inproc://backend')
-
-		print "WORKER running: starting"
 		while not self.kill_received:
-			_id = worker.recv()
-			msg = worker.recv()
-			print 'Worker received %s from %s' % (msg, _id)
-			replies = choice(xrange(5))
-			for i in xrange(replies):
-				time.sleep(1/choice(range(1,10)))
-				worker.send(_id, zmq.SNDMORE)
-				worker.send(msg)
+			if not self.reqs.empty():
+				message, addr = self.reqs.get()
+				ip, port = message.split(":")
+				
+				if ip != self.last_ip:
+					self.last_ip   = ip
+				
+				if port != self.last_port:
+					self.last_port = port
+			
+			if ( self.last_ip is not None ) and ( self.last_port is not None ):
+				mydata   = str( self.data.get_dict() )
+				response = requests.put("%s:%d" % ( self.last_ip, self.last_port ),
+						   data=mydata,
+						   #auth=('omer', 'b01ad0ce'),
+						   headers={'content-type':'application/json'},
+						   #params={'file': filepath}
+						)
+			
+			time.slee( 100 )
 
-			del msg
-
-		print "WORKER running: closing"
-		worker.close()
-		print "WORKER running: finished"
-
-
-
-
-
-def main_server():
-	"""main function
-	Here's how it works:
-
-	Clients connect to the server and send requests.
-	For each request, the server sends 0 or more replies.
-	Clients can send multiple requests without waiting for a reply.
-	Servers can send multiple replies without waiting for new requests.
-
-	The example runs in one process, with multiple threads simulating a 
-	real multiprocess architecture. When you run the example, you'll 
-	see three clients (each with a random ID), printing out the 
-	replies they get from the server. Look carefully and you'll see 
-	each client task gets 0 or more replies per request.
-
-	Some comments on this code:
-
-	The clients send a request once per second, and get zero or more 
-	replies back. To make this work using zmq_poll(), we can't simply 
-	poll with a 1-second timeout, or we'd end up sending a new request 
-	only one second after we received the last reply. So we poll at a 
-	high frequency (100 times at 1/100th of a second per poll), which 
-	is approximately accurate.
-
-	The server uses a pool of worker threads, each processing one 
-	request synchronously. It connects these to its frontend socket 
-	using an internal queue. It connects the frontend and backend 
-	sockets using a zmq_proxy() call.
-	"""
-	context       = zmq.Context()
 	
-	print "initializing server"
-	server        = ServerTask(context)
-	server.daemon = True
 
-	print "initializing worker"
-	worker        = ServerWorker(context)
-	worker.daemon = True
 
-	print "initializing broadcaster"
-	broad         = broadcaster()
-	broad.daemon  = True
 
-	run_event    = threading.Event()
-	run_event.set()
 
-	print "starting server"
-	server.start()
-	worker.start()
-	broad.start()
-	
-	try:
-		while True: time.sleep( 100 )
 
-	except (KeyboardInterrupt, SystemExit):
-		print "clear"
-		run_event.clear()
 
-		server.kill_received = True
-		worker.kill_received = True
-		broad.kill_received  = True
 
-		print "joining"
-		server.join()
-		worker.join()
-		broad.join()
+def main_server(SERVER_PORT):
+	#start broadcaster
+	#start flask server
 
-		print "bye"
-		sys.exit(0)
+	SERVER_MAC, SERVER_IP = status.getName()
+	broadcast_message = "%s:%d" % ( SERVER_IP, SERVER_PORT )
 
-		print "exit"
-
-def main_client():
-	data          = status.DataManager(db_path=dbPath, ext=pycklerext)
-	context       = zmq.Context()
-
-	run_event     = threading.Event()
-	run_event.set()
-	client        = ClientTask(context)
-	client.daemon = True
-	client.start()
+	bserver = broadcast_server( broadcast_message )
+	bserver.daemon = True
+	bserver.start()	
 
 	try:
 		while True: time.sleep( 100 )
 
 	except (KeyboardInterrupt, SystemExit):
 		print "clear"
-		run_event.clear()
 
-		client.kill_received = True
+		bserver.kill_received  = True
 
 		print "joining"
-		client.join()
+		bserver.join()
 
 		print "bye"
 		sys.exit(0)
 
 		print "exit"
+
+
+
+def main_client( dbPath, pycklerext, myName ):
+	#start broadcaster client
+	qclient        = Queue.Queue()	
+
+	bclient        = broadcast_client( qclient )
+	bclient.daemon = True
+	bclient.start()
+
+	dclient        = data_client( qclient, dbPath, pycklerext, myName )
+	dclient.daemon = True
+	dclient.start()
+
+	try:
+		while True: time.sleep( 100 )
+
+	except (KeyboardInterrupt, SystemExit):
+		print "clear"
+
+		bclient.kill_received  = True
+		dclient.kill_received  = True
+
+		print "joining"
+		bclient.join()
+		dclient.join()
+
+		print "bye"
+		sys.exit(0)
+
+		print "exit"
+
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -341,11 +198,30 @@ if __name__ == '__main__':
 	#http://zguide.zeromq.org/py:tasksink
 	#https://github.com/imatix/zguide/tree/master/examples/Python
 
-	if  os.path.basename( __file__ ) in [ 'server.py' ]:
-		main_server()
+
+	if   os.path.basename( __file__ ) in [ 'server.py' ]:
+		print "server mode"
+		print " - importing flask" 
+		import flask
+		SERVER_PORT       = 100000
+		main_server(SERVER_PORT)
+	
 	
 	elif os.path.basename( __file__ ) in [ 'client.py' ]:
-		main_client()
+		print "client mode"
+		print " - importing urllib2"
+		import urllib2
+	
+		print "importing status"
+		sys.path.insert(0, '.')
+		import status
+	
+		dbPath            = status.dbPath
+		pycklerext        = status.pycklerext
+		myName            = status.getName()
+	
+		print "  name:", myName
+		main_client( dbPath, pycklerext, myName )
 
 
 
