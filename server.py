@@ -3,15 +3,9 @@ import sys, os
 import time
 
 #easy_install requests
-#easy_install flask
 #easy_install jsonpickle
 #easy_install simplejson
 
-print "importing cpickle"
-import cPickle
-
-print "importing signal"
-import signal
 
 print "importing socket"
 import socket
@@ -19,14 +13,15 @@ import socket
 print "importing threading"
 import threading
 
+print "importing queue"
+import Queue
+
+
 print "importing select"
 import select
 
 print "importing requests"
 import requests
-
-print "importing queue"
-import Queue
 
 print "importing simple json"
 import simplejson
@@ -105,12 +100,6 @@ class broadcast_client(threading.Thread):
 		print "ending UDP CLIENT"
 
 
-
-
-
-
-
-
 class data_client(threading.Thread):
 	def __init__(self, reqs, dbPath, pycklerext, myName):
 		threading.Thread.__init__ (self)
@@ -157,6 +146,7 @@ class data_client(threading.Thread):
 						)
 				
 				except requests.exceptions.ConnectionError:
+					print " data: connection error"
 					self.last_ip   = None
 					self.last_port = None
 			
@@ -164,10 +154,6 @@ class data_client(threading.Thread):
 		print 'ending DATA CLIENT'
 
 	
-
-
-
-
 
 
 
@@ -231,10 +217,6 @@ def main_client( dbPath, pycklerext, myName ):
 		sys.exit(0)
 
 		print "exit"
-
-
-
-
 
 
 
