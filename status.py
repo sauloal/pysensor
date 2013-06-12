@@ -8,13 +8,18 @@ from inspect import isfunction
 
 print "importing psutil"
 import psutil
+
 print "importing netifaces"
 import netifaces
 
 print "importing cpyckle"
 import cPickle
 pycklerext = '.cpyc'
+
 print "finished importing"
+
+
+
 
 test           = False
 numReport      = 2
@@ -42,10 +47,13 @@ maxages      = { # 842 in total
 
 #apt-get install python-pip
 #apt-get install python-dev
-#apt-get install libzmq-dev
 
 #easy_install psutil
 #easy_install netifaces
+
+
+# NOT NECESSARY ANYMORE
+#apt-get install libzmq-dev
 #easy_install pyzmq
 
 
@@ -750,7 +758,14 @@ class DataManager(object):
 		for fn,utime,my_name in files:
 			print "        DataManager: loading fn:",fn,"time:",utime,"name:",my_name
 			if utime not in currs: currs[ utime ] = {}
-			currs[ utime ][ my_name ] = self.pickler.load( fn )
+			
+			try:
+				currs[ utime ][ my_name ] = self.pickler.load( fn )
+			except EOFError:
+				try:
+					shutil.move(fn, fn + '.err')
+				except IOError:
+					pass
 
 		print "      DataManager: done. length:", len(currs)
 
@@ -786,11 +801,13 @@ def getName():
 			sys.exit( 1 )
 		
 		with open(myNameFile, 'w') as fhd:
-			fhd.write(mac)
+			fhd.write("%s\n%s" % (mac, ip))
 	
 	mac = None
+	ip  = None
 	with open(myNameFile, 'r') as fhd:
-		mac = fhd.read()
+		mac = fhd.readline().strip()
+		ip  = fhd.readline().strip()
 	
 	if mac is None or len(mac) != 17:
 		print "not able to get MAC", mac

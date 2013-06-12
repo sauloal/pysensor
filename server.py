@@ -2,8 +2,28 @@
 import sys, os
 import time
 
+#easy_install requests
+#easy_install flask
+#easy_install jsonpickle
+#easy_install simplejson
+
+print "importing cpickle"
+import cPickle
+
 print "importing signal"
 import signal
+
+print "importing socket"
+import socket
+
+print "importing threading"
+import threading
+
+print "importing select"
+import select
+
+print "importing requests"
+import requests
 
 print "importing queue"
 import Queue
@@ -14,23 +34,20 @@ import simplejson
 print "importing jsonpickle"
 import jsonpickle
 
-print "importing socket"
-import socket
 
-print "importing cpickle"
-import cPickle
-
-print "importing threading"
-import threading
-
+print "importing status"
+sys.path.insert(0, '.')
+import status
+	
 
 print "finished importing"
 
 
-PING_PORT_NUMBER  =   9999
-PING_MSG_SIZE     = 1
-PING_INTERVAL     = 1  # Once per second
+PING_PORT_NUMBER  =  9999
 PING_MESSAGE_SIZE = 10000
+PING_INTERVAL     =     1  # Once per second
+DATA_INTERVAL     =     2  # Once per second
+
 
 
 
@@ -41,17 +58,23 @@ class broadcast_server(threading.Thread):
 		self.message       = message
 
 	def run(self):
-		my_socket = socket.socket(socket.AF_INET   , socket.SOCK_DGRAM    )
-		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_BROADCAST,1)
+		my_socket = socket.socket(socket.AF_INET   , socket.SOCK_DGRAM     )
+		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+		my_socket.setblocking(0)
+		my_socket.bind(('<broadcast>' ,PING_PORT_NUMBER))
 		
-		print 'starting UDP CLIENT ...'
+		print 'starting UDP SERVER ...'
 		
 		while not self.kill_received:
-			if message is not None:
+			if self.message is not None:
+				#print " sending to UDP client", self.message
 				my_socket.sendto(self.message, ('<broadcast>' ,PING_PORT_NUMBER))
-				my_socket.close()
+				#my_socket.close()
 			
-			time.sleep( 1 )
+			time.sleep( PING_INTERVAL )
+		
+		print 'ending UDP SERVER'
 
 
 class broadcast_client(threading.Thread):
@@ -61,17 +84,25 @@ class broadcast_client(threading.Thread):
 		self.reqs          = reqs
 
 	def run(self):
-		my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-		my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+		my_socket = socket.socket(socket.AF_INET   , socket.SOCK_DGRAM     )
+		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+		my_socket.setblocking(0)
 		my_socket.bind(('',PING_PORT_NUMBER))
 	
 		print 'starting UDP CLIENT ...'
 	
 		while not self.kill_received:
-			message , address = my_socket.recvfrom( PING_MESSAGE_SIZE )
+			ready = select.select([my_socket], [], [], PING_INTERVAL)
 			
-			self.reqs.put( [ address, int(str(message)) ] )
+			if ready[0]:
+				port , address = my_socket.recvfrom( PING_MESSAGE_SIZE )
+				#data = my_socket.recv(PING_MESSAGE_SIZE)
+				#print " UDP client received port %s from ip %s port %d" % ( port, address[0], address[1] )
+				
+				self.reqs.put( [ address[0], int(port) ] )
+				
+		print "ending UDP CLIENT"
 
 
 
@@ -95,12 +126,16 @@ class data_client(threading.Thread):
 		self.last_port     = None
 
 	def run(self):
+		
+		print 'starting DATA CLIENT ...'
 		while not self.kill_received:
 			if not self.reqs.empty():
-				message, addr = self.reqs.get()
-				ip, port = message.split(":")
+				ip, port = self.reqs.get()
+				print " data: got from UDP:"
+				print "  ip     :",ip
+				print "  port   :",port
 				
-				if ip != self.last_ip:
+				if ip   != self.last_ip:
 					self.last_ip   = ip
 				
 				if port != self.last_port:
@@ -108,14 +143,25 @@ class data_client(threading.Thread):
 			
 			if ( self.last_ip is not None ) and ( self.last_port is not None ):
 				mydata   = str( self.data.get_dict() )
-				response = requests.put("%s:%d" % ( self.last_ip, self.last_port ),
+				
+				print " data: sending:"
+				print " data:", mydata[:30]
+				print ' data: to %s:%d'%(self.last_ip, self.last_port)
+				
+				try:
+					response = requests.put("http://%s:%d" % ( self.last_ip, self.last_port ),
 						   data=mydata,
 						   #auth=('omer', 'b01ad0ce'),
 						   headers={'content-type':'application/json'},
 						   #params={'file': filepath}
 						)
+				
+				except requests.exceptions.ConnectionError:
+					self.last_ip   = None
+					self.last_port = None
 			
-			time.slee( 100 )
+			time.sleep( DATA_INTERVAL )
+		print 'ending DATA CLIENT'
 
 	
 
@@ -130,9 +176,9 @@ def main_server(SERVER_PORT):
 	#start flask server
 
 	SERVER_MAC, SERVER_IP = status.getName()
-	broadcast_message = "%s:%d" % ( SERVER_IP, SERVER_PORT )
+	broadcast_message     = SERVER_PORT
 
-	bserver = broadcast_server( broadcast_message )
+	bserver = broadcast_server( str(broadcast_message) )
 	bserver.daemon = True
 	bserver.start()	
 
@@ -176,7 +222,9 @@ def main_client( dbPath, pycklerext, myName ):
 		dclient.kill_received  = True
 
 		print "joining"
+		print "joining broadcast client"
 		bclient.join()
+		print "joining data client"
 		dclient.join()
 
 		print "bye"
@@ -211,10 +259,6 @@ if __name__ == '__main__':
 		print "client mode"
 		print " - importing urllib2"
 		import urllib2
-	
-		print "importing status"
-		sys.path.insert(0, '.')
-		import status
 	
 		dbPath            = status.dbPath
 		pycklerext        = status.pycklerext
