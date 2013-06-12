@@ -1,20 +1,50 @@
+Network distributed system-status collector (status.py), 
+advertizer (server.py), sender (client.py) and webserver 
+(webserver.py) gatherer and displayer.
+
+==========================================================
+
+the collector (status.py) should be run in a crontab.
+
+the client (client.py) should be run in the background and 
+it will send updates as soon as it finds a server through 
+UDP broadcast.
+
+the server (server.py) should be run in the background and 
+it will make itself known to all clients in the network 
+advertizing its ip and port.
+
+the webserver (webserver.py) gathers the information (PUT)
+from all clients and create reports visible through the 
+webbrowser (GET).
+
+==========================================================
+
 client.py    - symlink to server.py
              - acquire server ip through UDP
-               regularly send data to server
+             - regularly send data to server
+
 ps.py        - library for getting system information
              - kept separated so that server and webserver
                so those do not need to install and psutils
+
 server.py    - broadcasts the current ip and configured port
                through UDP
+
 status.py    - every time it is called, gather's the system
                status and saves it in the database
+
 webserver.py - handles the upload of data from the clients
                and the browser
              - whenever receiving data from the clients, saves in
                the local database
              - whenever receiving data from the browser, reads
                the data from the database
+
 status.cdb   - database folder. contains the pickled report named
                DATE@MAC
                  - DATE: seconds since ephoc rounded to two decimals
                  - MAC : mac address of the machine
+
+.status      - saves the address of the current machine so that it
+               does not need to query every time
