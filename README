@@ -1,0 +1,20 @@
+client.py    - symlink to server.py
+             - acquire server ip through UDP
+               regularly send data to server
+ps.py        - library for getting system information
+             - kept separated so that server and webserver
+               so those do not need to install and psutils
+server.py    - broadcasts the current ip and configured port
+               through UDP
+status.py    - every time it is called, gather's the system
+               status and saves it in the database
+webserver.py - handles the upload of data from the clients
+               and the browser
+             - whenever receiving data from the clients, saves in
+               the local database
+             - whenever receiving data from the browser, reads
+               the data from the database
+status.cdb   - database folder. contains the pickled report named
+               DATE@MAC
+                 - DATE: seconds since ephoc rounded to two decimals
+                 - MAC : mac address of the machine
