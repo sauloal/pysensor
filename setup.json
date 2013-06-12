@@ -1,0 +1,20 @@
+{
+	"test"              : false,
+	"numReport"         : 2,
+	"myNameFile"        : ".status",
+	"dbname"            : "status.cdb",
+	"deleteoldest"      : false,
+	"deleteoldfiles"    : false,
+		
+	"DATA_URL"          : "adddata",
+	"SECRET_KEY"        : "development key",
+	
+	
+	"PING_PORT_NUMBER"  :   9999,
+	"PING_MESSAGE_SIZE" :  10000,
+	"PING_INTERVAL"     :      1,
+	
+	"DATA_INTERVAL"     :      2,
+	
+	"SERVER_PORT"       : 100000,
+}

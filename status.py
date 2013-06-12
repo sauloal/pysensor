@@ -12,6 +12,12 @@ print "importing cpickle"
 import cPickle
 pycklerext = '.cpyc'
 
+print "importing simple json"
+import simplejson
+
+print "importing jsonpickle"
+import jsonpickle
+
 print "finished importing"
 
 #apt-get install python-pip
@@ -25,15 +31,18 @@ print "finished importing"
 #apt-get install libzmq-dev
 #easy_install pyzmq
 
+setupfile    = 'setup.json'
+
+if not os.path.exists(setupfile):
+    print "count not find setup file %s" % setupfile
+    sys.exit(1)
+
+for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
+    #print "SERVER K %s V %s" % (k, v)
+    globals()[k] = v
 
 
-test           = False
-numReport      = 2
-myNameFile     = '.status'
-
-dbPath         = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "status.cdb")
-deleteoldest   = False # delete files older than the max age
-deleteoldfiles = False # delete files or move them
+dbPath         = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), dbname)
 def_min        = 60
 def_hour       = 60 * def_min  # 1 hour
 def_day        = 24 * def_hour # 1 day

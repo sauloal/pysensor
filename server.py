@@ -33,16 +33,19 @@ import jsonpickle
 print "importing status"
 sys.path.insert(0, '.')
 import status
-	
 
 print "finished importing"
 
 
-PING_PORT_NUMBER  =  9999
-PING_MESSAGE_SIZE = 10000
-PING_INTERVAL     =     1  # Once per second
-DATA_INTERVAL     =     2  # Once per second
+setupfile    = 'setup.json'
 
+if not os.path.exists(setupfile):
+    print "count not find setup file %s" % setupfile
+    sys.exit(1)
+
+for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
+    #print "SERVER K %s V %s" % (k, v)
+    globals()[k] = v
 
 
 
@@ -138,7 +141,7 @@ class data_client(threading.Thread):
 				print ' data: to %s:%d'%(self.last_ip, self.last_port)
 				
 				try:
-					response = requests.put("http://%s:%d" % ( self.last_ip, self.last_port ),
+					response = requests.put("http://%s:%d/%s" % ( self.last_ip, self.last_port, DATA_URL ),
 						   data=mydata,
 						   #auth=('omer', 'b01ad0ce'),
 						   headers={'content-type':'application/json'},
@@ -233,7 +236,6 @@ if __name__ == '__main__':
 		print "server mode"
 		print " - importing flask" 
 		import flask
-		SERVER_PORT       = 100000
 		main_server(SERVER_PORT)
 	
 	
