@@ -56,7 +56,6 @@ maxages      = { # 842 in total
 
 utime     = time.time()
 myName    = None
-forbidden = []
 
 
 
@@ -240,12 +239,13 @@ class DataManager(object):
 			filename = filedata[0]
 			dcount  += 1
 			#print "      %4d/%4d/%4d - moving %s to %s" % ( dcount, scount, count, filename[0], filename[0]+'.bkp' )
-			srfile   = os.path.join(self.db_path, filename)
+			srcfile  = os.path.join(self.db_path, filename)
 			if deleteoldfiles:
-				os.remove( srfile )
+				os.remove( srcfile )
+				
 			else:
 				dstfile = srcfile + '.bkp'
-				shutil.move( srfile, dstfile )
+				shutil.move( srcfile, dstfile )
 		
 		print "      moved %4d/%4d files" % ( scount, count )
 

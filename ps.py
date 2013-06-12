@@ -8,9 +8,13 @@ import unicodedata
 print "importing psutil"
 import psutil
 
+print "importing netifaces"
+import netifaces
+
 print "importing inpect"
 from inspect import isfunction
 
+forbidden = []
 
 class Base(object):
 	def get_fields(self):
@@ -241,14 +245,13 @@ class Network(Base):
 	def init_self(self):
 		# print "init_self"
 	
-		nets   = netifaces.interfaces()
+		nets   = psutil.network_io_counters(pernic=True)
 		# {'lo' : iostat(bytes_sent=799953745, bytes_recv=799953745 , packets_sent=453698 , packets_recv=453698 , errin=0, errout=0, dropin=0, dropout=0), 
 		# 'eth0': iostat(bytes_sent=734324837, bytes_recv=4163935363, packets_sent=3605828, packets_recv=4096685, errin=0, errout=0, dropin=0, dropout=0)}
 		
 		self.net_devices = []
 		for net in sorted(nets):
 			netdata = nets[ net ]
-			
 			ifdata  = netifaces.ifaddresses(net)
 			mac     = ifdata[netifaces.AF_LINK][0]['addr']
 			ip      = ifdata[2                ][0]['addr']
