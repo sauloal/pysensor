@@ -44,8 +44,9 @@ if not os.path.exists(setupfile):
     sys.exit(1)
 
 for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
-    #print "SERVER K %s V %s" % (k, v)
+    print "SETUP K %s V %s" % (k, v)
     globals()[k] = v
+
 
 
 
@@ -162,12 +163,11 @@ class data_client(threading.Thread):
 
 def main_server(SERVER_PORT):
 	#start broadcaster
-	#start flask server
 
 	SERVER_MAC, SERVER_IP = status.getName()
 	broadcast_message     = SERVER_PORT
 
-	bserver = broadcast_server( str(broadcast_message) )
+	bserver        = broadcast_server( str(broadcast_message) )
 	bserver.daemon = True
 	bserver.start()	
 
@@ -234,8 +234,6 @@ if __name__ == '__main__':
 
 	if   os.path.basename( __file__ ) in [ 'server.py' ]:
 		print "server mode"
-		print " - importing flask" 
-		import flask
 		main_server(SERVER_PORT)
 	
 	

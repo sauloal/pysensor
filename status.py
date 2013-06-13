@@ -10,7 +10,6 @@ import netifaces
 
 print "importing cpickle"
 import cPickle
-pycklerext = '.cpyc'
 
 print "importing simple json"
 import simplejson
@@ -38,7 +37,7 @@ if not os.path.exists(setupfile):
     sys.exit(1)
 
 for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
-    #print "SERVER K %s V %s" % (k, v)
+    print "SETUP K %s V %s" % (k, v)
     globals()[k] = v
 
 
@@ -156,6 +155,7 @@ class DataManager(object):
 		self.ext       = ext
 		self.pickler   = pickler(self.db_path, ext)
 		self.data      = None
+		self.db        = {}
 		self.qry       = None
 		
 		if not os.path.exists( self.db_path ):
@@ -258,6 +258,10 @@ class DataManager(object):
 		
 		print "      moved %4d/%4d files" % ( scount, count )
 
+	def gen_key(self, utime, myName):
+		key = "%.2f@%s" % ( utime, myName )
+		return key
+
 	def update(self):
 		#TODO: FIX UTIME
 		#      ONLY RELOAD WHAT YOU DONT ALREADY HAVE
@@ -274,7 +278,7 @@ class DataManager(object):
 		
 		print "      DataManager: adding data"
 
-		key = "%.2f@%s" % ( utime, myName )
+		key = self.gen_key( utime, myName )
 		#key = (myName, utime)
 		#key = utime
 		
@@ -345,22 +349,40 @@ class DataManager(object):
 
 	def loadfiles(self, files):
 		#TODO: ONLY LOAD IF NOT IN MEMORY
-		currs = {}
 		for fn,utime,my_name in files:
-			print "        DataManager: loading fn:",fn,"time:",utime,"name:",my_name
-			if utime not in currs: currs[ utime ] = {}
+			if utime not in self.db: self.db[ utime ] = {}
 			
-			try:
-				currs[ utime ][ my_name ] = self.pickler.load( fn )
-			except EOFError:
+			if ( utime in self.db ) and ( my_name in self.db[ utime ] ):
+					continue
+				
+			else:
+				print "        DataManager: loading fn:",fn,"time:",utime,"name:",my_name
+			
 				try:
-					shutil.move(fn, fn + '.err')
-				except IOError:
-					pass
+					self.db[ utime ][ my_name ] = self.pickler.load( fn )
+	
+				except EOFError:
+					try:
+						shutil.move(fn, fn + '.err')
+						
+					except IOError:
+						pass
 
-		print "      DataManager: done. length:", len(currs)
+		for utime in self.db.keys():
+			for my_name in self.db[ utime ].keys():
+				key = self.gen_key( utime, my_name )
+				
+				fn  = self.pickler.getFn( key )
+				
+				if not os.path.exists( fn ):
+					self.db[ utime ].pop( my_name )
+			
+			if len( self.db[ utime ] ) == 0:
+				self.db.pop( utime )
 
-		return currs
+		print "      DataManager: done. length:", len(self.db)
+
+		return self.db
 
 	def get_dict(self, reps=None, begin=None, end=None):
 		if reps is not None:

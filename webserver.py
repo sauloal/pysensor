@@ -35,7 +35,7 @@ if not os.path.exists(setupfile):
     sys.exit(1)
 
 for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
-    #print "SERVER K %s V %s" % (k, v)
+    print "SETUP K %s V %s" % (k, v)
     globals()[k] = v
 
 
@@ -71,7 +71,7 @@ def init_classes():
 		with app.app_context():
 			print "initializing db"
 
-			data = status.DataManager( db_path=status.dbPath, ext=status.pycklerext )
+			data = status.DataManager( db_path=dbPath, ext=pycklerext )
 	
 			print "db loaded"
 
