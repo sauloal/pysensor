@@ -8,6 +8,9 @@ from pprint  import pprint     as pp
 print "importing netifaces"
 import netifaces
 
+print "importing psutil"
+import psutil
+
 print "importing cpickle"
 import cPickle
 
@@ -287,6 +290,9 @@ class DataManager(object):
 		#key = utime
 		
 		print "      DataManager: key",key
+		
+		if utime not in self.db:
+			self.db[ utime ] = {}
 		
 		self.db[ utime ][ myName ] = self.data.get_dict()
 		

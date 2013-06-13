@@ -253,8 +253,18 @@ class Network(Base):
 		for net in sorted(nets):
 			netdata = nets[ net ]
 			ifdata  = netifaces.ifaddresses(net)
-			mac     = ifdata[netifaces.AF_LINK][0]['addr']
-			ip      = ifdata[2                ][0]['addr']
+			#print net, ifdata,"\n"
+			#print net, "LINK",netifaces.AF_LINK,ifdata[netifaces.AF_LINK],ifdata[netifaces.AF_LINK][0],ifdata[netifaces.AF_LINK][0]['addr'],"\n"
+			#print net, "INET",netifaces.AF_INET,ifdata[netifaces.AF_INET],ifdata[netifaces.AF_INET][0],ifdata[netifaces.AF_INET][0]['addr'],"\n"
+
+
+			mac = "00:00:00:00:00:00"
+			if netifaces.AF_LINK in ifdata:
+				mac     = ifdata[netifaces.AF_LINK][0]['addr']
+
+			ip = "0.0.0.0"
+			if netifaces.AF_INET in ifdata:
+				ip      = ifdata[netifaces.AF_INET][0]['addr']
 			
 			nd      = Network_devices(	net,
 										netdata.bytes_sent  , netdata.bytes_recv, 
@@ -352,8 +362,12 @@ class Process(Base):
 			cpu_times               = procinfo.get_cpu_times()
 			cpu_times_user          = cpu_times.user
 			cpu_times_system        = cpu_times.system
-			cpu_affinity            = procinfo.get_cpu_affinity()
-			cpu_affinity            = ",".join([ str(x) for x in cpu_affinity])
+			cpu_affinity            = ""
+			try:
+				cpu_affinity            = procinfo.get_cpu_affinity()
+				cpu_affinity            = ",".join([ str(x) for x in cpu_affinity])
+			except:
+				cpu_affinity            = ""
 			memory_percent          = procinfo.get_memory_percent()
 			mem_info                = procinfo.get_ext_memory_info()
 			mem_info_rss            = mem_info.rss
