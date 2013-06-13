@@ -134,6 +134,10 @@ class Data_structure(object):
 		# return ['ltime', 'my_name', 'memories', 'cpus', 'disks', 'networks', 'processes']
 		return ['memories', 'cpus', 'disks', 'networks', 'processes']
 	
+	def add_dic(self, dic):
+		for key in dic:
+			setattr( self, key, dic[key] )
+
 	def get_dict(self):
 		res = {}
 		
@@ -284,10 +288,29 @@ class DataManager(object):
 		
 		print "      DataManager: key",key
 		
-		dic = self.data.get_dict()
-		self.pickler.save( key, dic )
+		self.db[ utime ][ myName ] = self.data.get_dict()
+		
+		self.save()
+		
+	def save(self):
+		for utime in self.db.keys():
+			for my_name in self.db[ utime ].keys():
+				key = self.gen_key( utime, my_name )
+				
+				fn  = self.pickler.getFn( key )
+				
+				if not os.path.exists( fn ):
+					dic = self.db[ utime ][ my_name ]
+					self.pickler.save( key, dic )
+					print "      DataManager: saving", key
 
-		print "      DataManager: done"
+	def add(self, dic):
+		for utime in dic:
+			for my_name in dic[ utime ]:
+				self.db[ uname ][ my_name ] = dic[ uname ][ my_name ]
+		self.save()
+		self.clean()
+		self.loadfiles()
 
 	def list(self):
 		files = []

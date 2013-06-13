@@ -87,8 +87,10 @@ def master_register_node():
 
 @app.route("/options", methods=['OPTIONS'])
 def master_get_options():
-    return jsonpickle.encode(	{
-									"/%s" % DATA_URL : "Add data to the database"
+	data_url_path = "/%s" % DATA_URL
+	
+	return jsonpickle.encode(	{
+									data_url_path : "Add data to the database"
 								}
 							)
 

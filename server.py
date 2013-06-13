@@ -119,7 +119,6 @@ class data_client(threading.Thread):
 		self.last_port     = None
 
 	def run(self):
-		
 		print 'starting DATA CLIENT ...'
 		while not self.kill_received:
 			if not self.reqs.empty():
