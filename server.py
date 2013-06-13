@@ -37,15 +37,15 @@ import status
 print "finished importing"
 
 
-setupfile    = 'setup.json'
+
+
+setupfile    = 'setup.conf'
 
 if not os.path.exists(setupfile):
     print "count not find setup file %s" % setupfile
     sys.exit(1)
 
-for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
-    print "SETUP K %s V %s" % (k, v)
-    globals()[k] = v
+exec( open(setupfile, 'r').read() )
 
 
 

@@ -14,12 +14,6 @@ import psutil
 print "importing cpickle"
 import cPickle
 
-print "importing simple json"
-import simplejson
-
-print "importing jsonpickle"
-import jsonpickle
-
 print "finished importing"
 
 #apt-get install python-pip
@@ -33,15 +27,22 @@ print "finished importing"
 #apt-get install libzmq-dev
 #easy_install pyzmq
 
-setupfile    = 'setup.json'
+setupfile    = 'setup.conf'
 
 if not os.path.exists(setupfile):
     print "count not find setup file %s" % setupfile
     sys.exit(1)
 
-for k,v in jsonpickle.decode(open(setupfile, 'r').read()).items():
-    print "SETUP K %s V %s" % (k, v)
-    globals()[k] = v
+exec( open(setupfile, 'r').read() )
+
+print "TEST             =", test
+print "NUMER OF REPORTS =", numReport
+print "MY NAME FILE     =", myNameFile
+print "DB NAME          =", dbname
+print "PICKLE EXTENSION =", pycklerext
+print "DELETE OLDEST    =", deleteoldest
+print "DELETE OLD FILES =", deleteoldfiles
+
 
 
 dbPath         = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), dbname)
