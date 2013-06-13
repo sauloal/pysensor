@@ -16,6 +16,8 @@ import threading
 print "importing queue"
 import Queue
 
+print "importing cpickle"
+import cPickle
 
 print "importing select"
 import select
@@ -144,12 +146,16 @@ class data_client(threading.Thread):
 			if ( self.last_ip is not None ) and ( self.last_port is not None ):
 				print " data: converting to dict"
 				dic      = self.data.get_dict()
-				print " data: encoding to json"
-				mydata   = jsonpickle.encode( dic )
+				#print " data: encoding to json"
+				#mydata   = jsonpickle.encode( dic )
+				print " data: encoding to pickle"
+				mydata   = cPickle.dumps( dic )
 				print " data: calculating md5"
 				d        = hashlib.md5(mydata).hexdigest()
 				print " data: concatenating"
-				mydata   = d + ":" + mydata
+				#mydata   = d + ":" + mydata
+				mydata   = cPickle.dumps( [ d, mydata ] )
+
 				
 				print " data: sending:"
 				print " data:", mydata[:30]

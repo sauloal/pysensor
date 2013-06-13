@@ -104,14 +104,20 @@ def get_raw():
 def master_register_node():
 	print "registering node"
 
-	begin       = request.data.find( ':' )
-	if begin == -1:
-		print "no hash found"
-		abort(404)
-		
-	mydata      = request.data[begin+1:     ]
-	sent_hash   = request.data[       :begin]
-	got_hash    = hashlib.md5(mydata).hexdigest()
+	#begin       = request.data.find( ':' )
+	#if begin == -1:
+	#	print "no hash found"
+	#	abort(404)
+	#	
+	#mydata      = request.data[begin+1:     ]
+	#sent_hash   = request.data[       :begin]
+	#got_hash    = hashlib.md5(mydata).hexdigest()
+	
+
+	mydata    = cPickle.loads( request.data )
+	sent_hash = mydata[0]
+	sent_data = mydata[1]
+	got_hash  = hashlib.md5( sent_data ).hexdigest()
 
 	if sent_hash == got_hash:
 		print "hashs are the same"
@@ -120,12 +126,12 @@ def master_register_node():
 		print "different hashes. error in transmission"
 		print "'%s'" % sent_hash
 		print "'%s'" % got_hash
-		print "mydata"
-		print mydata
+		print "sent data"
+		print sent_data
 		abort(404)
 
-	print mydata[:100]
-	client_info = jsonpickle.decode( mydata )
+	#client_info = jsonpickle.decode( mydata )
+	client_info = cPickle.loads( sent_data )
 	
 	for k in client_info:
 		nfo = client_info.pop( k )
