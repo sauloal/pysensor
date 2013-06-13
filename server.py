@@ -165,7 +165,8 @@ class data_client(threading.Thread):
 					response = requests.put("http://%s:%d/%s" % ( self.last_ip, self.last_port, DATA_URL ),
 						   data=mydata,
 						   #auth=('omer', 'b01ad0ce'),
-						   headers={'content-type':'application/json'},
+						   #headers={'content-type':'application/json'},
+						   headers={'content-type':'application/octet-stream'},
 						   #params={'file': filepath}
 						)
 				
