@@ -76,19 +76,30 @@ def init_classes():
 	if data is None:
 		with app.app_context():
 			print "initializing db"
-
+	
 			data = status.DataManager( db_path=dbPath, ext=pycklerext )
 	
 			print "db loaded"
 
+	else:
+		with app.app_context():
+			print "updating db"
+	
+			data = data.update()
+	
+			print "db updated"
 
-# ===== API TO SLAVE =====
+# ===== API TO BROWSER =====
 @app.route("/", methods=['GET'])
-def getter():
-    return "OK"
+def get_base():
+	return "OK"
+
+@app.route("/raw", methods=['GET'])
+def get_raw():
+	return jsonpickle.encode( data.get_dict() )
 
 
-# ===== API TO SLAVE =====
+# ===== API TO CLIENT =====
 @app.route(DATA_URL_PATH, methods=['PUT'])
 def master_register_node():
 	print "registering node"
@@ -100,7 +111,7 @@ def master_register_node():
 		
 	mydata      = request.data[begin+1:     ]
 	sent_hash   = request.data[       :begin]
-	got_hash    = hashlib.sha256(mydata).hexdigest()
+	got_hash    = hashlib.md5(mydata).hexdigest()
 
 	if sent_hash == got_hash:
 		print "hashs are the same"

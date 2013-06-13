@@ -141,7 +141,7 @@ class data_client(threading.Thread):
 			
 			if ( self.last_ip is not None ) and ( self.last_port is not None ):
 				mydata   = jsonpickle.encode( self.data.get_dict() )
-				d        = hashlib.sha256(mydata).hexdigest()
+				d        = hashlib.md5(mydata).hexdigest()
 				mydata   = d + ":" + mydata
 				
 				print " data: sending:"
