@@ -82,6 +82,11 @@ def init_classes():
 			print "db loaded"
 
 
+# ===== API TO SLAVE =====
+@app.route("/", methods=['GET'])
+def getter():
+    return "OK"
+
 
 # ===== API TO SLAVE =====
 @app.route(DATA_URL_PATH, methods=['PUT'])

@@ -173,6 +173,8 @@ def main_server(SERVER_PORT):
 
 	SERVER_MAC, SERVER_IP = status.getName()
 	broadcast_message     = SERVER_PORT
+	print "SERVER MAC", SERVER_MAC
+	print "SERVER IP ", SERVER_IP
 
 	bserver        = broadcast_server( str(broadcast_message) )
 	bserver.daemon = True
