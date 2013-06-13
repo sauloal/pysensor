@@ -119,7 +119,9 @@ class data_client(threading.Thread):
 		self.dbPath        = dbPath
 		self.pycklerext    = pycklerext
 		self.myName        = myName
+		print " data: loading data manager"
 		self.data          = status.DataManager(db_path=dbPath, ext=pycklerext)
+		print " data: data manager loaded"
 		
 		self.last_ip       = None
 		self.last_port     = None
@@ -140,8 +142,13 @@ class data_client(threading.Thread):
 					self.last_port = port
 			
 			if ( self.last_ip is not None ) and ( self.last_port is not None ):
-				mydata   = jsonpickle.encode( self.data.get_dict() )
+				print " data: converting to dict"
+				dic      = self.data.get_dict()
+				print " data: encoding to json"
+				mydata   = jsonpickle.encode( dic )
+				print " data: calculating md5"
 				d        = hashlib.md5(mydata).hexdigest()
+				print " data: concatenating"
 				mydata   = d + ":" + mydata
 				
 				print " data: sending:"
@@ -202,13 +209,17 @@ def main_client( dbPath, pycklerext, myName ):
 	#start broadcaster client
 	qclient        = Queue.Queue()	
 
+	print "loading broadcast client"
 	bclient        = broadcast_client( qclient )
 	bclient.daemon = True
 	bclient.start()
 
+	print "loading data client"
 	dclient        = data_client( qclient, dbPath, pycklerext, myName )
 	dclient.daemon = True
 	dclient.start()
+	print "looping"
+
 
 	try:
 		while True: time.sleep( 100 )
