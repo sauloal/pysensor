@@ -18,6 +18,8 @@ import simplejson
 print "importing jsonpickle"
 import jsonpickle
 
+print "importing hashlib"
+import hashlib
 
 print "importing flask"
 from flask       import Flask, request, session, g, redirect, url_for, abort, render_template, flash, make_response, jsonify, Markup, Response, send_from_directory, Blueprint
@@ -36,8 +38,8 @@ if not os.path.exists(setupfile):
 
 exec( open(setupfile, 'r').read() )
 
-
-
+DATA_URL_PATH = "/%s" % DATA_URL
+dbPath         = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), SERVER_DB)
 
 #VARIABLES
 app                = Flask(__name__)
@@ -46,16 +48,20 @@ app.jinja_env.globals['trim_blocks'       ] = True
 app.jinja_env.add_extension('jinja2.ext.do')
 
 
+jsonpickle.set_preferred_backend('simplejson')
+jsonpickle.set_encoder_options('simplejson', sort_keys=True, indent=1)
+
+
 data = None
 
 @app.before_request
 def before_request():
-    """
-    before each request, add global variables to the global G variable.
-    If using WSGI (eg. apache), this won't work
-    """
+	"""
+	before each request, add global variables to the global G variable.
+	If using WSGI (eg. apache), this won't work
+	"""
 
-    init_classes()
+	init_classes()
 
 
 def init_classes():
@@ -67,7 +73,7 @@ def init_classes():
 
 	global data
 
-	if requester is None or server is None:
+	if data is None:
 		with app.app_context():
 			print "initializing db"
 
@@ -78,27 +84,54 @@ def init_classes():
 
 
 # ===== API TO SLAVE =====
-@app.route("/%s"%DATA_URL, methods=['PUT'])
+@app.route(DATA_URL_PATH, methods=['PUT'])
 def master_register_node():
-    print "registering node"
-    client_info = jsonpickle.decode( request.data )
-    data.add( client_info )
-    return 'OK'
+	print "registering node"
+
+	begin       = request.data.find( ':' )
+	if begin == -1:
+		print "no hash found"
+		abort(404)
+		
+	mydata      = request.data[begin+1:     ]
+	sent_hash   = request.data[       :begin]
+	got_hash    = hashlib.sha256(mydata).hexdigest()
+
+	if sent_hash == got_hash:
+		print "hashs are the same"
+		
+	else:
+		print "different hashes. error in transmission"
+		print "'%s'" % sent_hash
+		print "'%s'" % got_hash
+		print "mydata"
+		print mydata
+		abort(404)
+
+	print mydata[:100]
+	client_info = jsonpickle.decode( mydata )
+	
+	for k in client_info:
+		nfo = client_info.pop( k )
+		client_info[ float(k) ] = nfo
+	
+	data.add( client_info )
+	
+	return 'OK'
 
 @app.route("/options", methods=['OPTIONS'])
 def master_get_options():
-	data_url_path = "/%s" % DATA_URL
-	
 	return jsonpickle.encode(	{
-									data_url_path : "Add data to the database"
+									DATA_URL_PATH : "Add data to the database"
 								}
 							)
 
 
 def main():
-    app.run(port=SERVER_PORT)
-   
+	app.debug = True
+	app.run(port=SERVER_PORT, host='0.0.0.0')
+
 
 
 if __name__ == '__main__':
-    main()
+	main()

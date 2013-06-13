@@ -117,7 +117,7 @@ class Data_structure(object):
 			self.cpus      = ps.Cpu().get_dict()
 			self.disks     = ps.Disk().get_dict()
 			self.networks  = ps.Network().get_dict()
-			self.processes = ps.Process().get_dict()
+			self.processes = {} #ps.Process().get_dict()
 		else:
 			self.memories  = None
 			self.cpus      = None
@@ -301,7 +301,9 @@ class DataManager(object):
 		
 	def save(self):
 		for utime in self.db.keys():
+			print "saving utime", utime, type(utime)
 			for my_name in self.db[ utime ].keys():
+				print "  saving my name", my_name
 				key = self.gen_key( utime, my_name )
 				
 				fn  = self.pickler.getFn( key )
@@ -313,11 +315,12 @@ class DataManager(object):
 
 	def add(self, dic):
 		for utime in dic:
+			if utime not in self.db: self.db[ utime ] = {}
 			for my_name in dic[ utime ]:
-				self.db[ uname ][ my_name ] = dic[ uname ][ my_name ]
+				self.db[ utime ][ my_name ] = dic[ utime ][ my_name ]
 		self.save()
 		self.clean()
-		self.loadfiles()
+		self.loadlast()
 
 	def list(self):
 		files = []

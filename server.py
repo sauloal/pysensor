@@ -30,6 +30,10 @@ print "importing jsonpickle"
 import jsonpickle
 
 
+print "importing hashlib"
+import hashlib
+
+
 print "importing status"
 sys.path.insert(0, '.')
 import status
@@ -48,6 +52,8 @@ if not os.path.exists(setupfile):
 exec( open(setupfile, 'r').read() )
 
 
+jsonpickle.set_preferred_backend('simplejson')
+jsonpickle.set_encoder_options('simplejson', sort_keys=True, indent=1)
 
 
 class broadcast_server(threading.Thread):
@@ -134,7 +140,9 @@ class data_client(threading.Thread):
 					self.last_port = port
 			
 			if ( self.last_ip is not None ) and ( self.last_port is not None ):
-				mydata   = str( self.data.get_dict() )
+				mydata   = jsonpickle.encode( self.data.get_dict() )
+				d        = hashlib.sha256(mydata).hexdigest()
+				mydata   = d + ":" + mydata
 				
 				print " data: sending:"
 				print " data:", mydata[:30]
