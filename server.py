@@ -54,6 +54,14 @@ if not os.path.exists(setupfile):
 exec( open(setupfile, 'r').read() )
 
 
+print "PING PORT NUMBER SENDER  :", PING_PORT_NUMBER_SENDER
+print "PING PORT NUMBER RECEIVER:", PING_PORT_NUMBER_RECEIVER
+print "PING MESSAGE SIZE        :", PING_MESSAGE_SIZE
+print "PING INTERVAL            :", PING_INTERVAL
+
+#UDP CLIENT
+print "DATA_INTERVAL            :", DATA_INTERVAL
+
 jsonpickle.set_preferred_backend('simplejson')
 jsonpickle.set_encoder_options('simplejson', sort_keys=True, indent=1)
 
@@ -69,14 +77,14 @@ class broadcast_server(threading.Thread):
 		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 		my_socket.setblocking(0)
-		my_socket.bind(('<broadcast>' ,PING_PORT_NUMBER))
+		my_socket.bind(('<broadcast>' ,PING_PORT_NUMBER_SENDER))
 		
 		print 'starting UDP SERVER ...'
 		
 		while not self.kill_received:
 			if self.message is not None:
 				#print " sending to UDP client", self.message
-				my_socket.sendto(self.message, ('<broadcast>' ,PING_PORT_NUMBER))
+				my_socket.sendto(self.message, ('<broadcast>' ,PING_PORT_NUMBER_RECEIVER))
 				#my_socket.close()
 			
 			time.sleep( PING_INTERVAL )
@@ -95,7 +103,7 @@ class broadcast_client(threading.Thread):
 		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		my_socket.setsockopt(     socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 		my_socket.setblocking(0)
-		my_socket.bind(('',PING_PORT_NUMBER))
+		my_socket.bind(('',PING_PORT_NUMBER_RECEIVER))
 	
 		print 'starting UDP CLIENT ...'
 	
@@ -142,6 +150,10 @@ class data_client(threading.Thread):
 				
 				if port != self.last_port:
 					self.last_port = port
+					
+				while not self.reqs.empty():
+					self.reqs.get()
+					#empy
 			
 			if ( self.last_ip is not None ) and ( self.last_port is not None ):
 				print " data: converting to dict"
