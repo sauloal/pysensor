@@ -66,8 +66,6 @@ maxages      = { # 842 in total
 # 2282 * 28k = 60.4Mb
 
 
-utime     = time.time()
-myName    = None
 
 
 
@@ -270,7 +268,7 @@ class DataManager(object):
 		key = "%.2f@%s" % ( utime, myName )
 		return key
 
-	def update(self):
+	def update(self, myName):
 		#TODO: FIX UTIME
 		#      ONLY RELOAD WHAT YOU DONT ALREADY HAVE
 		#      DELETE FROM MEMORY WHAT DOES NOT EXISTS ANYMORE
@@ -301,9 +299,9 @@ class DataManager(object):
 		
 	def save(self):
 		for utime in self.db.keys():
-			print "saving utime", utime, type(utime)
-			for my_name in self.db[ utime ].keys():
-				print "  saving my name", my_name
+			print "      DataManager: saving utime '" + str(utime) + "'"
+			for my_name in self.db[ utime ]:
+				print "      DataManager: saving name '" + my_name + "'"
 				key = self.gen_key( utime, my_name )
 				
 				fn  = self.pickler.getFn( key )
@@ -311,13 +309,23 @@ class DataManager(object):
 				if not os.path.exists( fn ):
 					dic = self.db[ utime ][ my_name ]
 					self.pickler.save( key, dic )
-					print "      DataManager: saving", key
+					print "      DataManager: saving '" + key + "'\n"
+					
+				else:
+					print "      DataManager: key exists '" + key + "'\n"
 
 	def add(self, dic):
 		for utime in dic:
-			if utime not in self.db: self.db[ utime ] = {}
+			utime = float( utime )
+			
+			if utime not in self.db:
+				print "      DataManager: adding utime '" + str(utime) + "'"
+				self.db[ utime ] = {}
+				
 			for my_name in dic[ utime ]:
+				print "      DataManager: adding name '" + my_name + "'"
 				self.db[ utime ][ my_name ] = dic[ utime ][ my_name ]
+				
 		self.save()
 		self.clean()
 		self.loadlast()
@@ -327,10 +335,10 @@ class DataManager(object):
 		if not os.path.exists(self.db_path):
 			return None
 		else:
-			for fn in os.listdir(self.db_path):
+			for fn in os.listdir( self.db_path ):
 				if not fn.endswith( pycklerext ): continue
 				utime, my_name = os.path.basename(fn).replace( pycklerext , '').split( '@' )
-				files.append( [ fn, float(utime), my_name ])
+				files.append( [ fn, float(utime), my_name ] )
 		
 		files.sort( key=lambda x: x[1], reverse=True )
 		
@@ -339,7 +347,7 @@ class DataManager(object):
 	def count(self):
 		return len(self.list())
 
-	def loadlast(self, reps=None):
+	def loadlast(self, reps=0):
 		print "      DataManager: querying. length:", reps
 
 		count  = self.count()
@@ -357,6 +365,7 @@ class DataManager(object):
 
 		files    = self.list()
 		subfiles = files[offset:]
+		
 		return self.loadfiles( subfiles )
 	
 	def loadtime(self, begin=None, end=None):
@@ -417,8 +426,8 @@ class DataManager(object):
 
 		return self.db
 
-	def get_dict(self, reps=None, begin=None, end=None):
-		if reps is not None:
+	def get_dict(self, reps=0, begin=None, end=None):
+		if reps != 0:
 			return self.loadlast(reps=reps)
 		
 		else:
@@ -466,7 +475,6 @@ def getName():
 def main_client():
 	#http://docs.sqlalchemy.org/en/rel_0_8/orm/tutorial.html
 	
-	global myName
 	print "  getting name"
 	myName = getName()[0]
 	print "  name:", myName
@@ -479,11 +487,11 @@ def main_client():
 	if test:
 		for i in range(4):
 			print "    adding",i
-			data.update()
+			data.update(myName)
 			
 	else:
 		print "    adding"
-		data.update()
+		data.update(myName)
 
 
 	if test:

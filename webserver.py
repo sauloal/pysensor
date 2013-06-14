@@ -84,19 +84,83 @@ def init_classes():
 	else:
 		with app.app_context():
 			print "updating db"
-	
-			data = data.update()
-	
+			data.loadlast()
 			print "db updated"
+
 
 # ===== API TO BROWSER =====
 @app.route("/", methods=['GET'])
 def get_base():
 	return "OK"
 
+
+@app.route("/stats", methods=['GET'])
+def get_stats():
+	computers = {}
+
+	comp_sum = 0
+	time_sum = 0
+	lines    = ""
+
+	for utime in data.db:
+		for my_name in data.db[ utime ]:
+			if my_name not in computers:
+				computers[ my_name ] = 0
+			
+			computers[ my_name ] += 1
+	
+	
+	
+	comp_sum = len(computers)
+	time_sum = len(data.db)
+
+	for computer_name in computers:
+		val  = computers[ computer_name ]
+		line = """\
+			<tr>
+				<td></td>
+				<td>%(computer_name)s</td>
+				<td>%(count)d</td>
+			</tr>
+""" % { 'computer_name': computer_name, 'count': val }
+		lines += line
+	
+	
+	
+	res = """<html>
+	<body>
+		<table>
+			<tr>
+				<td>Computers</td>
+				<td>%(computers)d</td>
+				<td></td>
+			</tr>
+			<tr>
+				<td>Times</td>
+				<td>%(times)d</td>
+				<td></td>
+			</tr>
+%(lines)s
+		</table>
+	</body>
+</html>""" % { 'computers': comp_sum, 'times': time_sum, 'lines': lines }
+
+	resp = Response(
+		response=res,
+		status=200,
+		mimetype='text/html'
+	)
+
+	return resp
+
 @app.route("/raw", methods=['GET'])
 def get_raw():
-	return jsonpickle.encode( data.get_dict() )
+	resp = Response(
+		response=jsonpickle.encode( data.get_dict() ),
+		status=200,
+		mimetype='application/json'
+	)
+	return resp
 
 
 # ===== API TO CLIENT =====
@@ -117,26 +181,28 @@ def master_register_node():
 	mydata    = cPickle.loads( request.data )
 	sent_hash = mydata[0]
 	sent_data = mydata[1]
-	got_hash  = hashlib.md5( sent_data ).hexdigest()
+	recv_hash = hashlib.md5( sent_data ).hexdigest()
 
-	if sent_hash == got_hash:
+	if sent_hash == recv_hash:
 		print "hashs are the same"
 		
 	else:
 		print "different hashes. error in transmission"
 		print "'%s'" % sent_hash
-		print "'%s'" % got_hash
+		print "'%s'" % recv_hash
 		print "sent data"
 		print sent_data
 		abort(404)
 
 	#client_info = jsonpickle.decode( mydata )
 	client_info = cPickle.loads( sent_data )
+	print str( client_info )[:100]
 	
-	for k in client_info:
-		nfo = client_info.pop( k )
-		client_info[ float(k) ] = nfo
+	#for k in client_info:
+		#nfo = client_info.pop( k )
+		#client_info[ float(k) ] = nfo
 	
+	print data
 	data.add( client_info )
 	
 	return 'OK'
