@@ -35,38 +35,29 @@ if not os.path.exists(setupfile):
 
 exec( open(setupfile, 'r').read() )
 
-print "TEST             =", test
-print "NUMER OF REPORTS =", numReport
-print "MY NAME FILE     =", myNameFile
-print "DB NAME          =", dbname
-print "PICKLE EXTENSION =", pycklerext
-print "DELETE OLDEST    =", deleteoldest
-print "DELETE OLD FILES =", deleteoldfiles
+print "TEST                    =", test
+print "NUMER OF REPORTS        =", numReport
+print "MY NAME FILE            =", myNameFile
+print "DB NAME                 =", dbname
+print "PICKLE EXTENSION        =", pycklerext
+print "DELETE OLDEST STATUS    =", deleteoldest_status
+print "DELETE OLDEST SERVER    =", deleteoldest_server
+print "DELETE OLD FILES STATUS =", deleteoldfiles_status
+print "DELETE OLD FILES SERVER =", deleteoldfiles_server
 
 
 
 dbPath         = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), dbname)
-def_min        = 60
-def_hour       = 60 * def_min  # 1 hour
-def_day        = 24 * def_hour # 1 day
-
-# at a rate of 1 per minute: 60 * 24 = 1440
-
-maxages      = { # 842 in total
-	'1h' : [ 1 * def_hour,   2 * def_min ], # older than  1 hour, saves every  2 min
-	'2h' : [ 2 * def_hour,   2 * def_min ], # older than  1 hour, saves every  2 min
-	'4h' : [ 4 * def_hour,   3 * def_min ], # older than  1 hour, saves every  2 min
-	'1d' : [ 1 * def_day ,   5 * def_min ], # older than  1 day , saves every  5 min   (288 per day *  1 = 288)
-	'3d' : [ 3 * def_day ,  10 * def_min ], # older than  3 days, saves every 10 min   (144 per day *  2 = 288)
-	'5d' : [ 5 * def_day ,  50 * def_min ], # older than  5 days, saves every 30 min   ( 48 per day *  2 =  96)
-	'10d': [10 * def_day ,       def_hour], # older than 10 days, saves every  1 hour  ( 24 per day *  5 = 120)
-	'20d': [20 * def_day ,   4 * def_hour], # older than 20 days, saves every  4 hours (  5 per day * 10 =  50)
-} # number of minutes: time
-# 1440 + 842 = 2282
-# 2282 * 28k = 60.4Mb
 
 
+deleteoldfiles = deleteoldfiles_server
+max_ages       = max_ages_server
+deleteoldest   = deleteoldest_server
 
+if __name__ == '__main__':
+	deleteoldfiles = deleteoldfiles_status
+	max_ages       = max_ages_status
+	deleteoldest   = deleteoldest_status
 
 
 class pickler(object):
@@ -179,8 +170,8 @@ class DataManager(object):
 		maxagename = None
 		minagename = None
 		
-		for sincename in maxages:
-			since = maxages[sincename][0]
+		for sincename in max_ages:
+			since = max_ages[sincename][0]
 			if since > maxage:
 				maxage     = since
 				maxagename = sincename
@@ -214,8 +205,8 @@ class DataManager(object):
 					subfiles.append( data )
 				continue
 			
-			for sincename in sorted(maxages, reverse=True, key=lambda x: maxages[x][0]):
-				since = maxages[sincename][0]
+			for sincename in sorted(max_ages, reverse=True, key=lambda x: max_ages[x][0]):
+				since = max_ages[sincename][0]
 				dtime = now - since
 				#print '    ',count,'dtime',dtime,'sincename',sincename
 				
@@ -228,8 +219,8 @@ class DataManager(object):
 		
 		for sincename in groupings:
 			datas = groupings[sincename]
-			since = maxages[  sincename][0]
-			every = maxages[  sincename][1]
+			since = max_ages[  sincename][0]
+			every = max_ages[  sincename][1]
 			print '    since name',sincename,'since',since,'every',every#,'datas',datas,'\n'
 			
 			lastdata      = datas[0]
