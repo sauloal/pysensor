@@ -54,6 +54,18 @@ jsonpickle.set_encoder_options('simplejson', sort_keys=True, indent=1)
 
 data = None
 
+
+
+def tojason( data ):
+	resp = Response(
+		response=jsonpickle.encode( data ),
+		status=200,
+		mimetype='application/json'
+	)
+	
+	return resp
+
+
 @app.before_request
 def before_request():
 	"""
@@ -86,6 +98,13 @@ def init_classes():
 			print "updating db"
 			data.loadlast()
 			print "db updated"
+
+	with app.app_context():
+		g.modules = {
+			'memall': get_mem_all,
+			'memone': get_mem_one
+		}
+		g.glanularity = 60
 
 
 # ===== API TO BROWSER =====
@@ -153,6 +172,7 @@ def get_stats():
 
 	return resp
 
+
 @app.route("/raw", methods=['GET'])
 def get_raw():
 	resp = Response(
@@ -161,6 +181,75 @@ def get_raw():
 		mimetype='application/json'
 	)
 	return resp
+
+
+
+
+
+# ===== API TO GETTERS =====
+@app.route("/get/<module>", methods=['GET'])
+def get_module(module):
+	if module in g.modules:
+		return g.modules[ module ]( data, request )
+	else:
+		return abort( 404 )
+
+
+def get_mem_all( data, request ):
+	mem_data = {}
+	for utime in data.db:
+		ctime = int(utime / g.glanularity) * g.glanularity
+		
+		for my_name in data.db[ utime ]:
+			mem = data.db[ utime ][ my_name ][ 'memories' ]
+			
+			for key in mem:
+				val = mem[ key ]
+				
+				if key not in mem_data:
+					mem_data[ key ] = {}
+				
+				if ctime not in mem_data[ key ]:
+					mem_data[ key ][ ctime ] = {}
+				
+				mem_data[ key ][ ctime ][ my_name ] = val
+	
+	return tojason( mem_data )
+
+def get_mem_one( data, request ):
+	name = request.args.get('name', None)
+	
+	if name is None:
+		return abort( 404 )
+	
+	mem_data = {}
+	for utime in data.db:
+		ctime = int(utime / g.glanularity) * g.glanularity
+		
+		for my_name in data.db[ utime ]:
+			if my_name != name:
+				continue
+			
+			mem = data.db[ utime ][ my_name ][ 'memories' ]
+			
+			for key in mem:
+				val = mem[ key ]
+				
+				if key not in mem_data:
+					mem_data[ key ] = {}
+				
+				if ctime not in mem_data[ key ]:
+					mem_data[ key ][ ctime ] = {}
+				
+				mem_data[ key ][ ctime ][ my_name ] = val
+	
+	if len( mem_data ) == 0:
+		return abort( 404 )
+
+	return tojason( mem_data )
+
+
+
 
 
 # ===== API TO CLIENT =====
@@ -207,12 +296,17 @@ def master_register_node():
 	
 	return 'OK'
 
+
 @app.route("/options", methods=['OPTIONS'])
 def master_get_options():
 	return jsonpickle.encode(	{
 									DATA_URL_PATH : "Add data to the database"
 								}
 							)
+
+
+
+
 
 
 def main():
