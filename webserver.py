@@ -173,6 +173,103 @@ def get_stats():
 	return resp
 
 
+
+    #lenfs         = len(newData['fs']) 
+    #res['fs'    ] = [None]*lenfs 
+    #for diskpos in xrange(lenfs): 
+    #    disk     = newData['fs'][diskpos] 
+    #    diskused = float( disk['used'] ) 
+    #    disksize = float( disk['size'] ) 
+    #    diskname =        disk['mnt_point'] 
+    #    diskperc = diskused / disksize * 100.0
+    #    diskperc = round(diskperc, 1) 
+    #    print "disk used %d size %d perc %.3f" % (diskused, disksize, diskperc) 
+    #    res['fs'    ][diskpos]    = [None]*4
+    #    res['fs'    ][diskpos][0] = diskname 
+    #    res['fs'    ][diskpos][1] = [ diskname ] 
+    #    res['fs'    ][diskpos][2] = [ 
+    #                                    [ 
+    #                                        [ timeNow, diskperc ], 
+    #                                    ] 
+    #                                ] 
+    #    res['fs'    ][diskpos][3] = [ 
+    #                                    [  
+    #                                        { 
+    #                                            'name'    : 'Used', 
+    #                                            'y'       : diskperc, 
+    #                                            'sliced'  : True, 
+    #                                            'selected': True, 
+    #                                            'color'   : 'red'
+    #                                        }, 
+    #                                        { 
+    #                                            'name'    : 'Free', 
+    #                                            'y'       : (100-diskperc), 
+    #                                            'sliced'  : True, 
+    #                                            'selected': False, 
+    #                                            'color'   : 'LawnGreen'
+    #                                        } 
+    #                                    ] 
+    #                                ] 
+    #
+    #
+    ##"idle": 95.52277685519846, 
+    ##"user": 2.2890820878512583, 
+    ##"system": 2.188141056950278 
+    #lencpu        = len(newData['percpu']) 
+    #res['cpu'   ] = [None]*lencpu 
+    #for cpupos in xrange(lencpu): 
+    #    cpu       = newData['percpu'][cpupos] 
+    #    cpuidle   = round(cpu['idle'  ], 1) 
+    #    cpuuser   = round(cpu['user'  ], 1) 
+    #    cpusystem = round(cpu['system'], 1) 
+    #
+    #    print "cpu idle %.3f user %.3f system %.3f" % (cpuidle, cpuuser, cpusystem) 
+    #    res['cpu'    ][cpupos]    = [None]*4
+    #    res['cpu'    ][cpupos][0] = 'CPU'
+    #    res['cpu'    ][cpupos][1] = ['CPU Idle', 'CPU User', 'CPU System'] 
+    #    res['cpu'    ][cpupos][2] = [ 
+    #                                    [ 
+    #                                        [ timeNow, cpuidle  ], 
+    #                                    ], 
+    #                                    [ 
+    #                                        [ timeNow, cpuuser  ], 
+    #                                    ], 
+    #                                    [ 
+    #                                        [ timeNow, cpusystem], 
+    #                                    ] 
+    #                                ] 
+    #    res['cpu'    ][cpupos][3] = [ 
+    #                                    [  
+    #                                        { 
+    #                                            'name'    : 'Idle', 
+    #                                            'y'       : cpuidle, 
+    #                                            'sliced'  : True, 
+    #                                            'selected': False, 
+    #                                            'color'   : 'blue'
+    #                                        }, 
+    #                                        { 
+    #                                            'name'    : 'User', 
+    #                                            'y'       : cpuuser, 
+    #                                            'sliced'  : True, 
+    #                                            'selected': False, 
+    #                                            'color'   : 'LawnGreen'
+    #                                        }, 
+    #                                        { 
+    #                                            'name'    : 'System', 
+    #                                            'y'       : cpusystem, 
+    #                                            'sliced'  : True, 
+    #                                            'selected': True, 
+    #                                            'color'   : 'red'
+    #                                        } 
+    #                                    ] 
+    #                                ] 
+  
+  
+
+
+
+
+
 @app.route("/raw", methods=['GET'])
 def get_raw():
 	resp = Response(

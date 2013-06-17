@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Glances</title>
+</head>
+
+<section>
+    <input type="text"   value="127.0.0.1" name="ip"      id="ip"     />
+    <input type="number" value="61209"     name="port"    id="port"   />
+    <input type="button" value="connect"   name="connect" id="connect" disabled=true/>
+    <label for="connect" name="address"    id="address"></label>
+    <label for="connect" name="status"     id="status" ></label>
+    <br/>
+    <textarea name="output" id="output" cols=50></textarea>
+</section>
+
+<section id="gauges" name="gauges">
+</section>
+
+<section>
+    <script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
+    <!--<script src="http://code.jquery.com/jquery-migrate-1.1.1.min.js"></script>-->
+    <script src="https://jquery-json.googlecode.com/svn/trunk/build/jquery.json.min.js"></script>
+    <script src="http://code.highcharts.com/highcharts.js"></script>
+    <script src="http://code.highcharts.com/highcharts-more.js"></script>
+
+    <script>
+        var UPDATE_FREQ = 5000;
+    </script>
+    
+    <script> //lines
+        function createLines($dst, graphName, seriesNames, anonUpdateFunc, name, pos) {
+            $dst.highcharts(
+                {
+                    chart: {
+                        type: 'spline',
+                        animation: Highcharts.svg, // don't animate in old IE
+                        marginRight: 10,
+                        events: {
+                            load: function() {
+                                // set up the updating of the chart each second
+
+                                var graph  = this;
+                                var newVal = anonUpdateFunc(name, pos, label);
+                                //console.log('updating lines '+graphName+' newval '+$.toJSON(newVal));
+                                
+                                for (var valpos = 0; valpos < newVal.length; valpos++) {
+                                    //console.log('updating lines '+graphName+' newval '+$.toJSON(newVal)+' valpos '+valpos+' val '+$.toJSON(newVal[valpos]));
+                                    var series = graph.series[valpos];
+                                    series.setData(newVal[valpos], true, true);
+                                }
+
+                                //series.addPoint(newVal, true, true);
+                                //console.log((new Date()).getTime());
+
+                                setInterval(function () {
+                                    var newVal   = anonUpdateFunc(name, pos, label);
+
+                                    if ( newVal ) {
+                                        if (graph) {
+                                            var newVal = anonUpdateFunc(name, pos, label);
+                                            //console.log('updating lines '+graphName+' newval '+$.toJSON(newVal));
+                                            
+                                            for (var valpos = 0; valpos < newVal.length; valpos++) {
+                                                //console.log('updating lines '+graphName+' newval '+$.toJSON(newVal)+' valpos '+valpos+' val '+$.toJSON(newVal[valpos]));
+                                                var series = graph.series[valpos];
+                                                series.setData(newVal[valpos], true, true);
+                                            }
+                                        }
+                                    }
+                                }, UPDATE_FREQ);
+                            }
+                        }
+                    },
+                    title: {
+                        text: graphName
+                    },
+                    xAxis: {
+                        type: 'datetime',
+                        tickPixelInterval: 150
+                    },
+                    yAxis: {
+                        title: {
+                            text: 'Value'
+                        },
+                        plotLines: [{
+                            value: 0,
+                            width: 1,
+                            color: '#808080'
+                        }]
+                    },
+                    tooltip: {
+                        formatter: function() {
+                                return '<b>'+ this.series.name +'</b><br/>'+
+                                Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', this.x) +'<br/>'+
+                                Highcharts.numberFormat(this.y, 2);
+                        }
+                    },
+                    legend: {
+                        enabled: false
+                    },
+                    exporting: {
+                        enabled: false
+                    },
+                    series: seriesNames
+                }
+            );
+        }
+    </script>
+
+    <script> //pie chart
+        function createPie($dst, graphName, seriesNames, anonUpdateFunc, name, pos) {
+            $dst.highcharts(
+                {
+                    chart: {
+                        type               : 'pie',
+                        plotBackgroundColor: null,
+                        plotBorderWidth    : null,
+                        plotShadow         : false
+                    },
+                    title: {
+                        text: graphName
+                    },
+                    tooltip: {
+                            pointFormat: '{series.name}: <b>{point.percentage}%</b>',
+                        percentageDecimals: 1
+                    },
+                    plotOptions: {
+                        pie: {
+                            allowPointSelect: true,
+                            cursor: 'pointer',
+                            dataLabels: {
+                                enabled: true,
+                                color: '#000000',
+                                connectorColor: '#000000',
+                                formatter: function() {
+                                    return '<b>'+ this.point.name +'</b>: '+ this.percentage +' %';
+                                }
+                            }
+                        }
+                    },
+                    series: seriesNames
+                },
+                
+                // Add some life
+                function (chart) {
+                    if (!chart.renderer.forExport) {
+                        var newVal = anonUpdateFunc(name, pos, label);
+                        //console.log('updating pie '+graphName+' newval '+$.toJSON(newVal));
+
+                        chart.series[0].setData(newVal, true);
+                        
+                        setInterval(function () {
+                            var newVal = anonUpdateFunc(name, pos, label);
+                            //console.log('updating pie '+graphName+' newval '+$.toJSON(newVal));
+                            if ( newVal ) {
+                                if (chart.series) {
+                                    console.log('updating '+graphName);
+                                    chart.series[0].setData(newVal, true);
+                                }
+                            }
+                        }, UPDATE_FREQ);
+                    }
+                }
+            );
+        }
+    </script>   
+
+    <script> //speedometer
+        function createGauge($dst, graphName, seriesNames, anonUpdateFunc, name, pos) {
+            $dst.highcharts(
+                {
+                    chart: {
+                        type: 'gauge',
+                        plotBackgroundColor: null,
+                        plotBackgroundImage: null,
+                        plotBorderWidth    : 0,
+                        plotShadow         : false
+                    },
+                    
+                    title: {
+                        text: graphName
+                    },
+                    
+                    pane: {
+                        startAngle: -150,
+                        endAngle: 150,
+                        background: [{
+                            backgroundColor: {
+                                linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
+                                stops: [
+                                    [0, '#FFF'],
+                                    [1, '#333']
+                                ]
+                            },
+                            borderWidth: 0,
+                            outerRadius: '109%'
+                        }, {
+                            backgroundColor: {
+                                linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
+                                stops: [
+                                    [0, '#333'],
+                                    [1, '#FFF']
+                                ]
+                            },
+                            borderWidth: 1,
+                            outerRadius: '107%'
+                        }, {
+                            // default background
+                        }, {
+                            backgroundColor: '#DDD',
+                            borderWidth    : 0,
+                            outerRadius    : '105%',
+                            innerRadius    : '103%'
+                        }]
+                    },
+                       
+                    // the value axis
+                    yAxis: {
+                        min:   0,
+                        max: 100,
+                        
+                        minorTickInterval: 'auto',
+                        minorTickWidth   : 1,
+                        minorTickLength  : 10,
+                        minorTickPosition: 'inside',
+                        minorTickColor   : '#666',
+                
+                        tickPixelInterval: 30,
+                        tickWidth        : 2,
+                        tickPosition     : 'inside',
+                        tickLength       : 10,
+                        tickColor        : '#666',
+                        labels: {
+                            step    : 2,
+                            rotation: 'auto'
+                        },
+                        title: {
+                            text: '%'
+                        },
+                        plotBands: [{
+                            from : 0,
+                            to   : 70,
+                            color: '#55BF3B' // green
+                        }, {
+                            from : 70,
+                            to   : 90,
+                            color: '#DDDF0D' // yellow
+                        }, {
+                            from : 90,
+                            to   : 100,
+                            color: '#DF5353' // red
+                        }]        
+                    },
+                
+                    series: seriesNames
+                },
+                
+                // Add some life
+                function (chart) {
+                    if (!chart.renderer.forExport) {
+                        var newVal = anonUpdateFunc(name, pos, label);
+                        //console.log("updating speedometer "+graphName+" newval "+$.toJSON(newVal))
+                        chart.series[0].points[0].update([ newVal ]);
+                        
+                        setInterval(function () {
+                            var newVal = anonUpdateFunc(name, pos, label);
+                            if ( newVal ) {
+                                if (chart.series) {
+                                    console.log('updating speedometer '+graphName);
+                                    chart.series[0].points[0].update([ newVal ]);
+                                }
+                            }
+                        }, UPDATE_FREQ);
+                    }
+                }
+            );
+        }
+    </script>
+    
+    <script> //all
+        var busyatwork = false;
+        var values     = null;
+        
+        //function linesUpdater(name, pos, label){ try { percs = values[name][pos][2]                             ; console.log("NAME: "+name+" POS: "+pos+" LABEL: "+label+" PERCS: "+$.toJSON(percs)); return percs; } catch(err) { return 0; }};
+        //function gaugeUpdater(name, pos, label){ try { perc  = values[name][pos][2].slice(-1)[0].slice(-1)[0][1]; console.log("NAME: "+name+" POS: "+pos+" LABEL: "+label+" PERC : "+$.toJSON(perc )); return perc ; } catch(err) { return 0; }};
+        //function pieUpdater(  name, pos, label){ try { perc  = values[name][pos][3].slice(-1)[0]                ; console.log("NAME: "+name+" POS: "+pos+" LABEL: "+label+" PERC : "+$.toJSON(perc )); return perc ; } catch(err) { return 0; }};
+        
+        function linesUpdater(name, pos, label){ try { percs = values[name][pos][2]                             ; return percs; } catch(err) { return 0; }};
+        function gaugeUpdater(name, pos, label){ try { perc  = values[name][pos][2].slice(-1)[0].slice(-1)[0][1]; return perc ; } catch(err) { return 0; }};
+        function pieUpdater(  name, pos, label){ try { perc  = values[name][pos][3].slice(-1)[0]                ; return perc ; } catch(err) { return 0; }};
+        
+        var mapping    = {
+            // ref       key,      title      Unity div name        function     updater
+            //'memoryG': [ 'memory', 'Memory' , 'Gb', 'gauge_memory', createGauge, gaugeUpdater ],
+            //'memoryL': [ 'memory', 'Memory' , 'Gb', 'lines_memory', createLines, linesUpdater ],
+            'fsP'    : [ 'fs'    , 'Disk'   , '%' , 'pie_fs'      , createPie  , pieUpdater   ],
+            //'cpuP'   : [ 'cpu'   , 'CPU %'  , '%' , 'pie_cpu'     , createPie  , pieUpdater   ],
+            //'cpuL'   : [ 'cpu'   , 'CPU %'  , '%' , 'lines_cpu'   , createLines, linesUpdater ]
+        }
+        
+        $(document).ready(function() {
+            $('#connect').click(function(){
+                updateAddress();
+                busyatwork = false;
+            });
+            $('#connect').attr("disabled", false);
+            busyatwork = true;
+            setInterval( updateData, UPDATE_FREQ );
+            Highcharts.setOptions({
+                global: {
+                    useUTC: false
+                }
+            });
+        });
+
+        
+        function updateAddress() {
+            console.log("updating address")
+            $('#address').text('http://' + $('#ip').val() + ":" + $('#port').val() + '/RPC2');
+            console.log( "updating address :: " + $('#address').text() )
+        }
+        
+        function updateData() {
+            if ( ! busyatwork ) {
+                console.log( "updating data")
+                busyatwork = true;
+                $.getJSON('/get', { address:$('#address').text() }, updateDataSuccess ).fail( updateDataFail );
+            } else {
+                console.log( "updating data :: busy")
+            }
+        }
+
+        
+        function updateDials() {
+            for (var ref in mapping) {
+                data    = mapping[ref];
+                name    = data[0];
+                label   = data[1];
+                unity   = data[2];
+                tgtname = data[3];
+                grapher = data[4];
+                updater = data[5];
+                
+                console.log("updating dial :: ref: "+ref+" name: "+ name);
+                poses    = values[name];
+                poseslen = poses.length;
+                console.log(values);
+                console.log(poses);
+                console.log("updating dial :: ref: "+ref+" name: "+ name +" length: "+poseslen);
+
+
+                for (var pos = 0; pos < poseslen; pos++) {
+                    tgtnamefull = tgtname+pos;
+                    $tgt        = $('#'+tgtnamefull);
+                    nfo         = poses[pos][0];
+                    series      = poses[pos][1];
+                    console.log("updating dial :: ref: "+ref+" name: "+ name +" length: "+poseslen+' series '+$.toJSON(series));
+
+                    // SPEEDOMETER
+                    var seriesNames = [];
+                    
+                    for (var serieNum=0; serieNum < series.length; serieNum++) {
+                        var serie = series[serieNum];
+                        console.log("  serie name "+serie);
+                        var snfo = {
+                                    name   : serie,
+                                    data   : [0],
+                                    tooltip: {
+                                        valueSuffix: unity
+                                    }
+                                }
+                        seriesNames.push(snfo);
+                    }
+                    console.log("  series names "+$.toJSON(seriesNames));
+                    
+                    labelfull   = label;
+                    if (poseslen > 1) {
+                        labelfull   = label+" #"+pos;
+                    }
+                    
+                    if (nfo.length > 0) {
+                        labelfull += " :: " + nfo;
+                    }
+                    
+                    if ($tgt.length == 0) {
+                        console.log("updating dial :: ref: "+ref+" name: "+ name + " length: "+poseslen+" pos: "+ pos +" :: creating dial")
+                        console.log("updating dial :: ref: "+ref+" name: "+ name + " length: "+poseslen+" pos: "+ pos +" :: creating dial :: name : "+tgtnamefull)
+                        console.log("updating dial :: ref: "+ref+" name: "+ name + " length: "+poseslen+" pos: "+ pos +" :: creating dial :: label: "+labelfull)
+                        console.log("updating dial :: ref: "+ref+" name: "+ name + " length: "+poseslen+" pos: "+ pos +" :: creating dial :: info : "+nfo)
+                        $("<div></div>", { id: tgtnamefull, name: tgtnamefull }).appendTo( '#gauges' );
+                        
+                        $tgt    = $('#'+tgtnamefull);
+                        
+                        grapher($tgt, labelfull, seriesNames, updater, name, pos); 
+                    } else {
+                        console.log("updating dial :: ref: "+ref+" name: "+ name + " pos: "+ pos +" :: dial exists")
+                    }
+                }
+            }
+            console.log( "updating dial :: done")
+        }
+
+        
+        function updateDataFail(jqXHR, status, error) {
+            console.log( "updating data :: getting data :: fail");
+            errMsg = "";
+            
+            if (jqXHR.status == 400) {
+                errMsg = "the request went ok but there was an error on the RCP side";
+            } else {
+                errMsg = 'data failed.'
+                + ' status: '       + status
+                + ' xhrStatus: '    + jqXHR.status
+                + ' xhrText: '      + jqXHR.statusText
+                + ' xhrResponseX: ' + jqXHR.responseXML
+                + ' xhrResponseT: ' + jqXHR.responseText
+                + ' headers: '      + jqXHR.getAllResponseHeaders();
+            }
+            
+            $('#status').text( status );
+            $('#output').text( errMsg );
+            values     = null;
+            busyatwork = false;
+        }
+        
+        function updateDataSuccess(data, status, jqXHR) {
+            console.log( "updating data :: getting data :: success")
+            errMsg = 'data success.'
+            + ' status: '       + status
+            + ' xhrStatus: '    + jqXHR.status
+            + ' xhrText: '      + jqXHR.statusText
+            + ' xhrResponseX: ' + jqXHR.responseXML
+            + ' xhrResponseT: ' + jqXHR.responseText
+            + ' headers: '      + jqXHR.getAllResponseHeaders();
+            
+            $('#status').text( status );
+            $('#output').text( data   );
+
+            if ( Object.keys(data).length === 0 ) {
+                console.log( "updating data :: getting data :: success :: empty");
+                values = {};
+            } else {
+                console.log( "updating data :: getting data :: success :: not empty");
+                values         = data['result'        ];
+                updateNum      = data['updateNum'     ];
+                updateValidNum = data['updateValidNum'];
+                resultLength   = data['resultLength'  ];
+                console.log('updateNum '     +updateNum     );
+                console.log('updateValidNum '+updateValidNum);
+                console.log('resultLength '  +resultLength  );
+                if (resultLength > 0) {
+                    console.log( "updating data :: getting data :: success :: not empty :: updating dial");
+                    updateDials();
+                }
+            }
+
+            busyatwork = false;
+        }
+
+
+
+    </script>
+
+</section>
+</html>
+
